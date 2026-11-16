@@ -352,6 +352,9 @@ struct LineInst {
     end: f32,
     /// (sung time, word centre in station space)
     words: Vec<(f32, Vec3)>,
+    /// Each word's (start, end, bounds min, bounds max) in station space, so the camera
+    /// can keep the sung word in frame.
+    bounds: Vec<(f32, f32, Vec3, Vec3)>,
 }
 
 // ---------------------------------------------------------------- camera
@@ -894,7 +897,7 @@ impl World {
                     arrivals.push(word.start);
                     words.push((0.5 * (word.start + word.end), Vec3::ZERO));
                 }
-                line_insts.push(LineInst { arrivals, group, spec: *spec, in_t, out_t, start: first, end: line.end(), words });
+                line_insts.push(LineInst { arrivals, group, spec: *spec, in_t, out_t, start: first, end: line.end(), words, bounds: Vec::new() });
                 continue;
             }
 
@@ -921,6 +924,7 @@ impl World {
             let track = if lrc.is_none() { 0.35 * size } else { 0.04 * size };
             let row_gap = 1.38;
             let mut word_acc: HashMap<usize, (Vec3, f32)> = HashMap::new();
+            let mut word_box: HashMap<usize, (Vec3, Vec3)> = HashMap::new();
             let n_rows = rows.len() as f32;
             // Horizontal rows: each gap is as tall as the two rows it separates, so an enlarged
             // word never runs into the row above or below it.
@@ -976,6 +980,9 @@ impl World {
                     let acc = word_acc.entry(*wi).or_insert((Vec3::ZERO, 0.0));
                     acc.0 += centre;
                     acc.1 += 1.0;
+                    let bx = word_box.entry(*wi).or_insert((Vec3::splat(f32::MAX), Vec3::splat(f32::MIN)));
+                    bx.0 = bx.0.min(base + Vec3::new(0.0, -0.12 * s, 0.0));
+                    bx.1 = bx.1.max(base + Vec3::new(adv * s, 0.88 * s, 0.0));
                     let word = &line.words[*wi];
                     let boxed = lrc.is_some_and(|i| BOXED.contains(&(i, word.text.as_str())));
                     let h = |k: u32| hash3(li as u32 * 977 + k, glyphs.len() as u32);
@@ -1100,7 +1107,13 @@ impl World {
                 .filter_map(|(wi, w)| word_acc.get(&wi).map(|(c, n)| (0.5 * (w.start + w.end), *c / *n)))
                 .collect();
             words.sort_by(|a, b| a.0.total_cmp(&b.0));
-            line_insts.push(LineInst { arrivals: Vec::new(), group, spec: *spec, in_t, out_t, start: first, end: line.end(), words });
+            let bounds = line
+                .words
+                .iter()
+                .enumerate()
+                .filter_map(|(wi, w)| word_box.get(&wi).map(|(lo, hi)| (w.start, w.end, *lo, *hi)))
+                .collect();
+            line_insts.push(LineInst { arrivals: Vec::new(), group, spec: *spec, in_t, out_t, start: first, end: line.end(), words, bounds });
         }
 
         // メロディア: a staff runs behind the word and the notes slide along it, like reading the score.
@@ -1225,6 +1238,23 @@ impl World {
         // Slow push while the line is sung.
         let u = clamp01((t - line.start) / (line.end - line.start + 1.0).max(1.0));
         let mut dist = spec.shot.dist * (1.0 - 0.14 * u) * (1.0 - 0.2 * held);
+        // Back off just enough to keep the word being sung inside the frame (inside the
+        // letterbox, with a margin). Fly-through lines are left alone.
+        if !punch {
+            let tan_v = (deg(spec.shot.fov + 11.0 * held) * 0.5).tan();
+            let tan_h = tan_v * 16.0 / 9.0;
+            let aim = target - Vec3::new(spec.shot.ox, spec.shot.oy, 0.0);
+            for &(ws, we, lo, hi) in &line.bounds {
+                let on = ease_between(tc, ws - 0.35, ws) * (1.0 - ease_between(tc, we + 0.2, we + 0.6));
+                if on <= 0.0 {
+                    continue;
+                }
+                let dx = (hi.x - aim.x).abs().max((lo.x - aim.x).abs());
+                let dy = (hi.y - aim.y).abs().max((lo.y - aim.y).abs());
+                let need = (dx / (tan_h * 0.9)).max(dy / (tan_v * 0.78));
+                dist = dist.max(dist + (need - dist) * on);
+            }
+        }
         if i == 3 {
             dist *= 1.0 - 0.3 * ease_out((t - 43.68) / 0.35); // 起きる: snap in
         }
@@ -1997,6 +2027,28 @@ impl World {
             }
         }
 
+        if std::env::var_os("ILIOS_CLIP").is_some() {
+            let cam = cam_now.camera();
+            for g in &self.glyphs {
+                if g.kind != Kind::Main || g.line == 0 || !(g.word_start..g.word_end + 0.2).contains(&t) {
+                    continue;
+                }
+                let n = &ts[g.node];
+                let op = match &n.object { fframes::three_d::Object::Mesh(m) => m.material.opacity, _ => 0.0 };
+                if !n.visible || op < 0.4 {
+                    continue;
+                }
+                let m = ts.world_matrix(g.node);
+                for (x, y) in [(0.05, 0.0), (0.9, 0.0), (0.05, 0.8), (0.9, 0.8)] {
+                    if let Some(p) = cam.project(m.transform_point3(Vec3::new(x, y, 0.0)), 1920.0, 1080.0) {
+                        if p.x < 30.0 || p.x > 1890.0 || p.y < 92.0 || p.y > 988.0 {
+                            eprintln!("CLIP t={t:.2} line={} ch={} px=({:.0},{:.0})", g.line, g.ch, p.x, p.y);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
         // 二人: two small lights circling each other, from the interlude through verse 2. On
         // 違う夢 one of them drifts off.
         let lights_on = window_f(t, 96.5, 125.0, 1.5);
