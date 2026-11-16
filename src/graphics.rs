@@ -170,7 +170,7 @@ impl MagicCircle {
             let n = chars.len();
             for (i, ch) in chars.iter().enumerate() {
                 let a = offset + TAU * i as f32 / n as f32;
-                let Ok(geo) = Geometry::text(crate::world::FONT_BYTES, ch, 1.0, 0.01, 0.0) else { continue };
+                let Ok(geo) = Geometry::text(crate::world::lyric_font(), ch, 1.0, 0.01, 0.0) else { continue };
                 let width = geo.bounds().size().x * size;
                 let rot = Quat::from_rotation_z(a - deg(90.0));
                 let p = Vec3::new(a.cos() * rr, a.sin() * rr, 0.0);
@@ -208,7 +208,7 @@ impl MagicCircle {
             let c = Vec2::from_angle(a) * r * 0.54;
             scene.add_to(pentad, Node::mesh(Geometry::ring(r * 0.06 - 0.01, r * 0.06 + 0.01, 72), glow()).at(c.x, c.y, 0.0));
             // A rune in each circle (one per corner of the pentad).
-            if let Ok(geo) = Geometry::text(crate::world::FONT_BYTES, ["時", "刻", "巡", "環", "夢"][j], 1.0, 0.01, 0.0) {
+            if let Ok(geo) = Geometry::text(crate::world::lyric_font(), ["時", "刻", "巡", "環", "夢"][j], 1.0, 0.01, 0.0) {
                 let size = r * 0.06;
                 let w = geo.bounds().size().x * size;
                 scene.add_to(pentad, Node::mesh(geo, glow()).at(c.x - w * 0.5, c.y - size * 0.36, 0.0).scaled(size));

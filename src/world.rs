@@ -11,7 +11,15 @@ use std::collections::HashMap;
 use std::f32::consts::{PI, TAU};
 use std::sync::Arc;
 
-pub const FONT_BYTES: &[u8] = include_bytes!("../media/ShipporiMincho-ExtraBold.ttf");
+const FONT_BYTES: &[u8] = include_bytes!("../media/ShipporiMincho-ExtraBold.ttf");
+
+/// The lyric font. `ILIOS_FONT=<path to a .ttf>` swaps it for one run, to try other faces.
+pub fn lyric_font() -> &'static [u8] {
+    static FONT: std::sync::OnceLock<Vec<u8>> = std::sync::OnceLock::new();
+    FONT.get_or_init(|| {
+        std::env::var_os("ILIOS_FONT").map_or_else(|| FONT_BYTES.to_vec(), |path| std::fs::read(&path).expect("ILIOS_FONT"))
+    })
+}
 const LABEL_FONT: &[u8] = include_bytes!("../media/ShipporiMincho-Medium.ttf");
 /// Box plates are drawn in this colour behind boxed glyphs; boxed glyphs turn dark.
 const INK: u32 = 0x150e1a;
@@ -734,7 +742,7 @@ impl World {
             if let Some(g) = glyph_cache.get(&(label, ch)) {
                 return Some(g.clone());
             }
-            let font = if label { LABEL_FONT } else { FONT_BYTES };
+            let font = if label { LABEL_FONT } else { lyric_font() };
             let g = Geometry::text_glyphs(font, &ch.to_string(), 1.0, if label { 0.02 } else { 0.1 }, 0.0)
                 .ok()?
                 .into_iter()
