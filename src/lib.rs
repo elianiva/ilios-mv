@@ -333,6 +333,8 @@ impl Video for IliosVideo<'_> {
                 .float("uStaff", f.staff)
                 .float3("uPickA", f.picks[0].x, f.picks[0].y, f.picks[0].z)
                 .float3("uPickB", f.picks[1].x, f.picks[1].y, f.picks[1].z)
+                .float("uPickXA", f.pick_x[0])
+                .float("uPickXB", f.pick_x[1])
                 .float3("uDrop", f.drop.x, f.drop.y, f.drop.z)
                 .float3("uKeyA", f.keys[0].x, f.keys[0].y, f.keys[0].z)
                 .float3("uKeyB", f.keys[1].x, f.keys[1].y, f.keys[1].z)

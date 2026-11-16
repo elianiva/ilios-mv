@@ -598,6 +598,8 @@ pub struct Frame3d {
     /// Ending: the staff of light, and the last two guitar picks on it: (line, seconds since, amount).
     pub staff: f32,
     pub picks: [Vec3; 2],
+    /// Where along the staff each of those two picks was struck (screen x from the centre).
+    pub pick_x: [f32; 2],
     /// Vocal echo: (seconds since, amount).
     pub echo: (f32, f32),
     /// Colour of the air on the planet's limb.
@@ -2265,6 +2267,11 @@ impl World {
                     Vec3::new((staff_step(GUITAR_NOTES[k]).rem_euclid(10.0) / 2.0).floor(), t - GUITAR[k], (-(t - GUITAR[k]) / 0.9).exp())
                 };
                 [pick(0), pick(1)]
+            },
+            pick_x: {
+                let n = GUITAR.iter().filter(|g| **g <= t).count();
+                let at = |back: usize| if n <= back { 0.0 } else { -0.55 + 1.1 * hash3((n - 1 - back) as u32, 47) };
+                [at(0), at(1)]
             },
             drop: DROPS.iter().enumerate().rev().find(|(_, d)| **d <= t).map_or(Vec3::ZERO, |(k, d)| Vec3::new(0.3 + 0.4 * hash3(k as u32, 31), t - d, (-(t - d) / 1.5).exp())),
             keys: {
