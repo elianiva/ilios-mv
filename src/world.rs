@@ -1416,8 +1416,9 @@ impl World {
         let (star_dir, star_amt) = if t < 228.0 { (Vec3::new(0.04, 0.03, -1.0), wish) } else { (KIMI_DIR, kimi) };
         let iris = window_f(t, BRIDGE - 0.3, BRIDGE_MOON - 1.6, 1.2);
         let voice = window_f(t, BRIDGE_MOON - 1.0, BREAKDOWN, 1.2);
-        let neb_a = Vec3::new(0.30, 0.16, 0.55).lerp(gem_color * 0.6, gem);
-        let neb_b = Vec3::new(0.12, 0.22, 0.60).lerp(gem_color, gem);
+        // The album cover's key: a navy body with cobalt edges.
+        let neb_a = Vec3::new(0.15, 0.15, 0.47).lerp(gem_color * 0.6, gem);
+        let neb_b = Vec3::new(0.10, 0.30, 0.86).lerp(gem_color, gem);
         // One comet crosses the empty interlude.
         let cx = clamp01((t - 99.0) / 4.5);
         let head = Vec2::new(0.96, 0.10).lerp(Vec2::new(0.22, 0.60), cx);

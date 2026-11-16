@@ -207,6 +207,42 @@ fn hud<'a>(t: f32, op: f32) -> Svgr<'a> {
     )
 }
 
+/// The album cover's framing: four hairlines that cross near two corners, the title small at
+/// the bottom right with the cover's red rule, and the credits set vertically on the sides.
+/// `bar` is the letterbox height in pixels; the frame stays inside it.
+fn cover_frame<'a>(t: f32, op: f32, bar: f32) -> Svgr<'a> {
+    let draw = |from: f32| ease_between(t, BAND_IN + from, BAND_IN + from + 2.4);
+    if op <= 0.003 || t < BAND_IN {
+        return Svgr::empty();
+    }
+    let labels = ease_out((t - VERSE_1) / 1.2);
+    let (top, bottom) = (bar + 62.0, 1080.0 - bar - 62.0);
+    let hair = |x1: f32, y1: f32, x2: f32, y2: f32, k: f32| {
+        fframes::svgr!(<line x1={x1} y1={y1} x2={x1 + (x2 - x1) * k} y2={y1 + (y2 - y1) * k}
+            stroke={TEXT} stroke-width="1" stroke-opacity="0.2" />)
+    };
+    fframes::svgr!(
+        <g opacity={op}>
+            {hair(0.0, top, 820.0, top, draw(0.0))}
+            {hair(150.0, 0.0, 150.0, 700.0, draw(0.4))}
+            {hair(1920.0, bottom, 1100.0, bottom, draw(0.8))}
+            {hair(1770.0, 1080.0, 1770.0, 380.0, draw(1.2))}
+            <g opacity={labels}>
+                <rect x="186" y={top - 33.0} width="96" height="2" fill={RED} />
+                <text x="310" y={top - 23.0} font-family={SERIF} font-weight="500" font-size="24" letter-spacing="7"
+                    fill={TEXT} fill-opacity="0.8">"ILIOS"</text>
+                <text x="1602" y={bottom - 22.0} text-anchor="end" font-family={SERIF} font-weight="500" font-size="28"
+                    letter-spacing="6" fill={TEXT} fill-opacity="0.85">"イリオス"</text>
+                <rect x="1628" y={bottom - 33.0} width="96" height="2" fill={RED} />
+                <text transform="translate(112 540) rotate(90)" text-anchor="middle" font-family={SERIF} font-weight="500"
+                    font-size="26" letter-spacing="6" fill={TEXT} fill-opacity="0.6">"Nenne"</text>
+                <text transform="translate(1800 540) rotate(90)" text-anchor="middle" font-family={SERIF} font-weight="500"
+                    font-size="26" letter-spacing="6" fill={TEXT} fill-opacity="0.6">"*Luna"</text>
+            </g>
+        </g>
+    )
+}
+
 impl Video for IliosVideo<'_> {
     const FPS: usize = 30;
     const WIDTH: usize = WIDTH;
@@ -300,7 +336,7 @@ impl Video for IliosVideo<'_> {
                 .float("uGlowAmt", f.glow_amt * (0.85 + 0.45 * audio.low))
                 .float3("uAtmo", 0.16, 0.20, 0.46)
                 .float("uDay", f.eclipse)
-                .float("uStars", 0.8 * (0.7 + 0.6 * audio.high))
+                .float("uStars", 0.62 * (0.7 + 0.6 * audio.high))
                 .float4("uComet", f.comet[0], f.comet[1], f.comet[2], f.comet[3])
                 .float("uCometAmt", f.comet_amt),
         );
@@ -319,10 +355,15 @@ impl Video for IliosVideo<'_> {
         let hud_op = 0.0 * ease_out((t - 2.0) / 1.5) * (1.0 - f.twirl) * (1.0 - f.crt) * (1.0 - card) * (1.0 - 0.6 * f.flash)
             * (1.0 - ease_between(t, OUTRO - 1.0, OUTRO + 1.0));
 
+        // The album cover's frame: it draws itself in under the title and leaves before the guitar's
+        // strings cross the picture. It steps aside for the wormhole and the white flashes.
+        let frame_op = (1.0 - f.twirl) * (1.0 - clamp01(f.flash)) * (1.0 - clamp01(f.dome)) * (1.0 - ease_between(t, 249.5, 252.5));
+
         fframes::svgr!(
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width={WIDTH} height={HEIGHT}>
                 <image href={layer.href()} x="0" y="0" width="1920" height="1080" />
                 {hud(t, hud_op)}
+                {cover_frame(t, frame_op, bars * 1080.0)}
                 <g opacity={labels * hud_op}>
                     <text x="1690" y="1012" text-anchor="end" font-family={SERIF} font-weight="500" font-size="30"
                         letter-spacing="6" fill={TEXT} fill-opacity="0.85">"イリオス"</text>
