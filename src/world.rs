@@ -81,8 +81,9 @@ const PUNCH_D: f32 = 7.0;
 const HOLDS: &[(usize, char, f32, f32, f32, f32)] = &[
     (9, 'く', 72.9, 73.2, 75.4, 3.0),
     (13, 'と', 91.0, 91.5, 93.7, 2.4),
-    (19, 'て', 138.0, 138.3, 139.85, 1.6),
-    (19, 'か', 140.0, 140.35, 143.2, 2.6),
+    (19, 'て', 138.2, 138.3, 139.7, 1.6),
+    (19, 'た', 139.9, 140.05, 141.7, 1.6),
+    (19, 'か', 141.78, 141.9, 143.2, 2.6),
     (22, 'く', 155.7, 156.0, 158.0, 3.0),
     (37, 'う', 231.5, 232.1, 234.7, 3.2),
     (38, 'て', 240.5, 241.0, 245.4, 3.0),
@@ -161,7 +162,6 @@ const WORD_STYLES: &[(usize, &str, f32, Option<u32>, bool)] = &[
     (1, "君", 1.5, None, false),
     (1, "音", 1.5, None, false),
     (2, "起きる", 1.3, None, true),
-    (3, "「高", 1.35, None, false),
     (3, "高", 1.35, None, false),
     (3, "く", 1.35, None, false),
     (3, "天井", 1.2, None, false),
@@ -202,11 +202,11 @@ const WORD_STYLES: &[(usize, &str, f32, Option<u32>, bool)] = &[
     (23, "きり", 1.6, None, false),
     (24, "迎える", 1.4, None, false),
     // Bridge: the only colour in the video. 「星」 and 「月」 stay small and cold.
-    (25, "「星」", 0.7, Some(LILAC), false),
+    (25, "星", 0.7, Some(LILAC), false),
     (26, "エメラルド", 1.3, Some(EMERALD), false),
     (27, "目", 1.6, Some(EMERALD), false),
     (27, "好き", 1.3, None, false),
-    (28, "「月」", 0.7, Some(LILAC), false),
+    (28, "月", 0.7, Some(LILAC), false),
     (29, "アメジスト", 1.3, Some(AMETHYST), false),
     (30, "声", 1.6, Some(AMETHYST), false),
     (30, "好き", 1.3, None, false),
@@ -223,7 +223,7 @@ const WORD_STYLES: &[(usize, &str, f32, Option<u32>, bool)] = &[
 
 /// Extra row breaks after these words (line, word).
 const BREAKS: &[(usize, &str)] = &[
-    (0, "ない"), (2, "に"), (3, "く"), (4, "いる」"), (6, "も"), (6, "繰り返し"), (7, "が"), (7, "奏でる"), (9, "ない"),
+    (0, "ない"), (2, "に"), (3, "く"), (4, "いる"), (6, "も"), (6, "繰り返し"), (7, "が"), (7, "奏でる"), (9, "ない"),
     (10, "ただ"), (11, "て"),
     (13, "語らう"), (15, "を"), (16, "な"), (16, "んで"), (17, "夢"),
     (19, "も"), (19, "繰り返し"), (20, "が"), (20, "奏でる"), (22, "ない"), (23, "ただ"), (24, "て"),
@@ -1188,8 +1188,8 @@ impl World {
             dist *= 1.0 + 1.6 * expo_out((t - 168.46) / 3.5);
         }
         if i == 19 {
-            // 見てーみたかーった: back off a little on the first held note, then far and fast on the long one.
-            dist *= 1.0 - 0.25 * ease_in((t - 140.3) / 4.1);
+            // 見てーみたーかーった: back off a little on the first held note, then far and fast on the long one.
+            dist *= 1.0 - 0.25 * ease_in((t - 140.05) / 4.3);
         }
         let off = Vec3::new(-spec.shot.ox, -spec.shot.oy, 0.0);
         let anchor = spec.station.world(target + off);
@@ -1206,7 +1206,7 @@ impl World {
         let normal = if i == 12 { face } else { swing * face };
         if i == 19 {
             // ...and the horizon turns under it the whole time.
-            up = Quat::from_axis_angle(face, 0.12 * ease_between(t, 138.3, 139.9) + 0.38 * ease_between(t, 140.3, 144.3)) * up;
+            up = Quat::from_axis_angle(face, 0.12 * ease_between(t, 138.3, 139.7) + 0.38 * ease_between(t, 140.05, 144.3)) * up;
         }
         let mut fov = spec.shot.fov;
         let mut look = anchor;

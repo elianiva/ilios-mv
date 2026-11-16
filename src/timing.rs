@@ -31,7 +31,7 @@ pub const INTERLUDE: f32 = 94.0;
 pub const VERSE_2: f32 = 112.39;
 /// The band slams back in under 鉛のような (one of the strongest onsets, 4.9).
 pub const BAND_BACK: f32 = 126.48;
-pub const MITEMITAKATTA: f32 = 140.12;
+pub const MITEMITAKATTA: f32 = 139.76;
 pub const CHORUS_2: f32 = 144.51;
 pub const SABISHIKU_2: f32 = 154.94;
 pub const BRIDGE: f32 = 172.95;
