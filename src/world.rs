@@ -1210,16 +1210,27 @@ impl World {
         let tc = t.clamp(line.start - 0.3, line.end + 0.6);
         let mut acc = Vec3::ZERO;
         let mut wsum = 0.0;
+        let punch = matches!(spec.flow, Flow::Punch | Flow::PunchBack);
         for (wt, c) in &line.words {
             let w = (-((tc - wt) / 0.55).powi(2)).exp() + 1e-4;
-            acc += *c * w;
+            // Fly-through lines: aim at the middle of the phrase the word is in, not the word,
+            // so each phrase sits in the centre of the frame.
+            let c = if punch {
+                let row: Vec<Vec3> = line.words.iter().map(|w| w.1).filter(|o| (o.z - c.z).abs() < 0.5).collect();
+                row.iter().sum::<Vec3>() / row.len() as f32
+            } else {
+                *c
+            };
+            acc += c * w;
             wsum += w;
         }
         let centre = line.words.iter().map(|w| w.1).sum::<Vec3>() / line.words.len().max(1) as f32;
         // Keep a little of the line's centre so the camera doesn't chase every syllable.
         // While time stops (届くはずのない…) it holds dead centre.
-        let punch = matches!(spec.flow, Flow::Punch | Flow::PunchBack);
-        let target = if i == 10 || i == 23 { centre } else if punch { acc / wsum } else { (acc / wsum).lerp(centre, 0.25) };
+        // 鉛のような…: each phrase is brought to the middle of the line's space (see render).
+        // Follow the word across; the first two phrases float a little higher than the last.
+        let lead = Vec3::new(0.5 * (acc / wsum).x, spec.size * (1.6 - 0.85 * ease_between(t, 132.2, 132.7)), 0.0);
+        let target = if i == 17 { lead } else if i == 10 || i == 23 { centre } else if punch { acc / wsum } else { (acc / wsum).lerp(centre, 0.25) };
         // While a note is held the letter grows: stay on the whole line and give it room.
         let held = HOLDS.iter().filter(|h| h.0 == i).map(|h| ease_between(t, h.3, h.4) * (1.0 - ease_between(t, h.4, h.4 + 0.8))).fold(0.0_f32, f32::max);
         let held = if i >= 38 { 0.0 } else { held };
