@@ -639,6 +639,44 @@ fn glow(out: &mut Vec<Particle>, pos: Vec3, size: f32, color: Rgb, amt: f32) {
     }
 }
 
+/// A moving light and the trail it leaves. `path` is where the light was, newest first, at
+/// even steps in time. The trail is one unbroken ribbon: sprites are laid closer than their
+/// own radius along the path and each carries light in proportion to the length it covers, so
+/// a fast light leaves a long thin streak and never a row of beads. The head is a small white
+/// point in a soft bloom that falls off smoothly, with no disc edge.
+fn light_trail(out: &mut Vec<Particle>, path: &[Vec3], width: f32, color: Rgb, amt: f32) {
+    if amt <= 0.003 || path.len() < 2 {
+        return;
+    }
+    let white = Rgb::hex(0xffffff);
+    let n = (path.len() - 1) as f32;
+    for (k, pair) in path.windows(2).enumerate() {
+        let (a, b) = (pair[0], pair[1]);
+        let len = (b - a).length();
+        let steps = ((len / (width * 0.3)).ceil() as usize).clamp(1, 60);
+        for j in 0..steps {
+            let f = (j as f32 + 0.5) / steps as f32;
+            let u = (k as f32 + f) / n;
+            let fade = (1.0 - u).powf(2.2);
+            let w = width * (0.18 + 0.82 * (1.0 - u).powf(1.3));
+            // Light per sprite: the same light per metre of trail however fast the light moves.
+            let per = (len / steps as f32 / (width * 0.3)).min(1.0) * amt * fade;
+            let p = a.lerp(b, f);
+            out.push(Particle::new(p, w * 0.32, white.lerp(color, 0.35) * (0.9 * per)).opacity(per.min(1.0)));
+            out.push(Particle::new(p, w, color * (0.32 * per)).opacity((0.6 * per).min(1.0)));
+            out.push(Particle::new(p, w * 3.2, color * (0.035 * per)).opacity((0.12 * per).min(1.0)));
+        }
+    }
+    // The head: many thin layers, each wider and fainter, add up to a smooth falloff.
+    let head = path[0];
+    out.push(Particle::new(head, width * 0.42, white * (4.0 * amt)).opacity(amt));
+    for k in 0..14 {
+        let r = width * 0.6 * 1.32_f32.powi(k);
+        let e = 0.8 / (1.0 + k as f32 * 0.9).powf(1.6);
+        out.push(Particle::new(head, r, white.lerp(color, clamp01(0.3 + k as f32 * 0.12)) * (e * amt)).opacity((e * amt).min(1.0)));
+    }
+}
+
 fn window_f(t: f32, a: f32, b: f32, fade: f32) -> f32 {
     crate::graphics::window(t, a, b, fade)
 }
@@ -1768,7 +1806,9 @@ impl World {
         if lights_on > 0.003 {
             let follow = ease_between(t, 110.5, 113.5);
             let split = ease_between(t, 119.8, 124.5);
-            for k in 0..36u32 {
+            let (mut blue_path, mut pink_path) = (Vec::new(), Vec::new());
+            let leave = |up: Vec3| (up * 2.6 + Vec3::new(2.4, 0.0, -1.5)) * split;
+            for k in 0..56u32 {
                 let tt = t - k as f32 * 0.022;
                 let mut c = self.lights_path(tt);
                 let mut up = Vec3::Y;
@@ -1779,35 +1819,19 @@ impl World {
                 }
                 let th = tt * 1.1;
                 let orbit = Vec3::new(th.cos() * 0.55, th.sin() * 0.35, th.sin() * 0.55);
-                let tail = 1.0 - k as f32 / 36.0;
-                let size = if k == 0 { 0.17 } else { 0.1 * tail.powf(1.5) };
-                let leave = (up * 2.6 + Vec3::new(2.4, 0.0, -1.5)) * split;
-                let (blue, pink) = (lights_on * (1.0 - split), lights_on);
-                if k == 0 {
-                    // The heads burn: a white-hot core inside layered halos that breathe.
-                    let breathe = 1.0 + 0.12 * (t * 5.3).sin() + 0.08 * (t * 8.9 + 1.0).sin();
-                    glow(&mut debris, c + orbit + leave, 0.17 * breathe, Rgb::hex(0x9fc2ff), blue);
-                    glow(&mut debris, c - orbit, 0.17 * (2.0 - breathe), Rgb::hex(0xffb8bd), pink);
-                    continue;
-                }
-                debris.push(Particle::new(c + orbit + leave, size, Rgb::hex(0x9fc2ff) * (3.0 * tail * blue)).opacity(tail * blue));
-                debris.push(Particle::new(c - orbit, size, Rgb::hex(0xffb8bd) * (3.0 * tail * pink)).opacity(tail * pink));
+                blue_path.push(c + orbit + leave(up));
+                pink_path.push(c - orbit);
             }
+            let breathe = 1.0 + 0.1 * (t * 5.3).sin() + 0.06 * (t * 8.9 + 1.0).sin();
+            light_trail(&mut debris, &blue_path, 0.115 * breathe, Rgb::hex(0x7fb0ff), lights_on * (1.0 - split));
+            light_trail(&mut debris, &pink_path, 0.115 * (2.0 - breathe), Rgb::hex(0xff8f9c), lights_on);
         }
         let kimi_on = window_f(t, self.lines[37].start + 0.1, 235.3, 0.35);
         if kimi_on > 0.003 {
-            for k in 0..40u32 {
-                let tt = t - k as f32 * 0.02;
-                let p = self.kimi_light(tt);
-                let far = (p - cam_now.pos).length();
-                let tail = 1.0 - k as f32 / 40.0;
-                let size = (if k == 0 { 0.03 } else { 0.018 * tail }) * (6.0 + far * 0.5);
-                if k == 0 {
-                    glow(&mut debris, p, size, Rgb::hex(0x9fc2ff), kimi_on);
-                    continue;
-                }
-                debris.push(Particle::new(p, size, Rgb::hex(0x9fc2ff) * (3.5 * tail * kimi_on)).opacity(tail * kimi_on));
-            }
+            let path: Vec<Vec3> = (0..50u32).map(|k| self.kimi_light(t - k as f32 * 0.02)).collect();
+            // It keeps its size on screen as it flies away, so it stays a light and not a dot.
+            let far = (path[0] - cam_now.pos).length();
+            light_trail(&mut debris, &path, 0.018 * (6.0 + far * 0.5), Rgb::hex(0x7fb0ff), kimi_on);
         }
         if !debris.is_empty() {
             s.add(Node::particles(debris, Blending::Additive));
@@ -1900,7 +1924,9 @@ impl World {
             neb_b,
             comet: [tail.x, tail.y, head.x, head.y],
             comet_amt,
-            shade: 0.0,
+            // A pool of shade behind the title, so the magic circle's lines dim where they pass
+            // the letters and the title stands in front of it.
+            shade: 0.85 * ease_between(t, BAND_IN + 0.1, BAND_IN + 1.2) * (1.0 - ease_between(t, 27.0, 28.6)),
             glow_col,
             glow_amt,
             star_dir,

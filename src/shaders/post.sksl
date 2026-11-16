@@ -520,7 +520,7 @@ half4 main(float2 p0) {
     // In the choruses the same pool, wider, quiets the nebula and the circle's small runes
     // right behind the words.
     wide /= 13.6;
-    col *= 1.0 - clamp(glow * 1.8 + wide * 1.5, 0.0, 1.0) * max(0.72 * uSunAmt * uEclipse, uShade);
+    col *= 1.0 - clamp(glow * 2.8 + wide * 2.4, 0.0, 1.0) * max(0.72 * uSunAmt * uEclipse, uShade);
     col += uGlowCol * (glow * 0.5 + wide * 0.55) * uGlowAmt;
     // A vocal echo: the words ring outward in fading copies.
     // The downbeat strikes the words and they ring: faint copies of the lettering swell out of

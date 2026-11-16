@@ -299,11 +299,11 @@ impl MagicCircle {
         if let Some(at) = credits {
             // (text, size, tracking, gain); an empty text is the red diamond between the two.
             let runs: [(&str, f32, f32, f32); 5] = [
-                ("VOCAL", 0.03, 0.42, 1.25),
-                ("Nenne", 0.066, 0.14, 2.3),
+                ("VOCAL", 0.03, 0.42, 1.9),
+                ("Nenne", 0.066, 0.14, 3.4),
                 ("", 0.0, 0.0, 0.0),
-                ("*Luna", 0.066, 0.14, 2.3),
-                ("MUSIC", 0.03, 0.42, 1.25),
+                ("*Luna", 0.066, 0.14, 3.4),
+                ("MUSIC", 0.03, 0.42, 1.9),
             ];
             let gap = |k: usize| r * if k == 1 || k == 2 { 0.075 } else { 0.045 };
             // Lay the runs out on a straight line first, then bend the line onto the arc.
@@ -553,7 +553,7 @@ pub fn mix(t: f32) -> Mix {
     let title_circle = window(t, BAND_IN - 0.05, VERSE_1 - 0.5, 0.8);
     let ruler = window(t, PRE_1 + 0.2, BLUE_WORLD - 0.9, 0.4);
     // The circles are no longer the subject: the title keeps a faint one, the choruses none.
-    let (dial, title_circle, ruler) = (dial * 0.0, title_circle * 0.7, ruler * 0.0);
+    let (dial, title_circle, ruler) = (dial * 0.0, title_circle * 0.5, ruler * 0.0);
     Mix { stars, dial, gem, title_circle, ruler }
 }
 
@@ -649,7 +649,7 @@ impl Graphics {
         }
 
         // Magic circles.
-        let title_circle = MagicCircle::build(scene, Vec3::new(0.0, 1.0, 9.0), 6.4, Some(CREDITS_AT - BAND_IN));
+        let title_circle = MagicCircle::build(scene, Vec3::new(0.0, 1.0, 6.5), 7.6, Some(CREDITS_AT - BAND_IN));
         let chorus_circle = MagicCircle::build(scene, Vec3::new(0.0, 0.0, 1.4), DIAL_R * 1.25, None);
 
         // Sound rings.
