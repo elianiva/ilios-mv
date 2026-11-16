@@ -1686,14 +1686,25 @@ impl World {
         let eclipse = 0.5 * ease_between(t, FINAL - 0.05, FINAL + 1.6) * (1.0 - ease_between(t, OITE - 1.0, OITE + 3.2));
         // The wish star grows through the breakdown and goes white on the hit; at the end one
         // star hangs where 君 went and answers each chime.
-        let wish = (0.35 * ease_between(t, 202.5, 206.0) + 1.4 * ease_in((t - 208.0) / 11.2)) * (1.0 - ease_between(t, FINAL, FINAL + 0.4));
+        // It answers the line: it rises out of the dark on 願い, blooms on 星 and keeps
+        // twinkling, then the run at it builds it up to the hit.
+        let hoshi = 205.35;
+        let bloom = if t >= hoshi { (-(t - hoshi) / 0.9).exp() } else { 0.0 };
+        let wish = (0.45 * ease_between(t, 202.6, 204.8)
+            + 0.3 * ease_between(t, hoshi - 0.15, hoshi + 0.4)
+            + 0.9 * bloom
+            + 1.0 * ease_in((t - 209.0) / 10.2))
+            * (1.0 + 0.07 * (t * 6.3).sin() * window_f(t, 205.5, 212.0, 1.0))
+            * (1.0 - ease_between(t, FINAL, FINAL + 0.4));
         let chime = 0.7 * cue_pulse(DROPS, t, 1.3) + 0.3 * cue_pulse(KEYS, t, 0.5);
         let chime = if t > 250.0 { chime } else { 0.0 };
         let kimi = (0.75 * ease_between(t, 240.0, 262.0) + chime) * (1.0 - ease_between(t, END - 2.5, END - 0.5));
         // In the run at it, the wish star slides onto the vanishing point: the streaks of the
         // flight leave from it, so it is where we are going.
-        let ahead = { let c = self.camera_at(t); (c.look - c.pos).normalize_or_zero() };
-        let wish_dir = Vec3::new(0.04, 0.03, -1.0).normalize().lerp(ahead, smooth5(clamp01((t - 206.0) / 4.0))).normalize_or_zero();
+        let (ahead, cam_up) = { let c = self.camera_at(t); ((c.look - c.pos).normalize_or_zero(), c.up.normalize_or_zero()) };
+        // Above the words while they are sung, so it is not hidden behind 星.
+        let above = (ahead + cam_up * 0.2).normalize_or_zero();
+        let wish_dir = above.lerp(ahead, smooth5(clamp01((t - 208.5) / 3.0))).normalize_or_zero();
         let (star_dir, star_amt) = if t < 228.0 { (wish_dir, wish) } else { (KIMI_DIR, kimi) };
         let iris = window_f(t, BRIDGE - 0.3, BRIDGE_MOON - 1.6, 1.2);
         let voice = window_f(t, BRIDGE_MOON - 1.0, BREAKDOWN, 1.2);
