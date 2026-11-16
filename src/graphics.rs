@@ -9,6 +9,8 @@ const STAR: u32 = 0xf2ecff;
 
 /// The chorus dial (the lyric stations sit on it).
 pub const DIAL_R: f32 = 9.6;
+/// When the credits start being written onto the title circle.
+pub const CREDITS_AT: f32 = BAND_IN + 4.0 * BEAT + 0.4;
 /// Loudness of the song at this frame, from fframes' FFT (`Frame::visualize_audio_frame`),
 /// each 0..~1.
 #[derive(Clone, Debug, Default)]
@@ -130,192 +132,391 @@ pub struct Graphics {
     ring_events: Vec<(f32, f32)>,
 }
 
-/// A magic circle that "controls time", after the references: an outer ring with eight
-/// small circles riding it, a hatched band, a band of small time-runes, the clock numerals
-/// (they tick once a beat), a ring of outward spikes with five small circles and arrows, a
-/// {12/5} star lattice and a double-ringed core with crescents. Layers turn at different
-/// speeds and directions. It stays dim; a glow travels outward through it now and then.
-struct MagicCircle {
-    root: NodeId,
-    /// (layer group, order from the centre).
-    layers: Vec<(NodeId, f32)>,
-    numerals: NodeId,
-    runes: NodeId,
-    lattice: NodeId,
-    pentad: NodeId,
-    riders: NodeId,
+/// One separately lit part of a magic circle.
+struct Piece {
+    node: NodeId,
+    /// Order from the centre; the travelling glow reaches higher layers later.
+    layer: f32,
+    /// Seconds after the circle starts drawing that this part is drawn.
+    delay: f32,
+    gain: f32,
+    color: u32,
+    /// Angle on its ring for the parts a light runs round; NaN for the rest.
+    ang: f32,
 }
 
-/// Arc of hairline segments from angle `a0` to `a1` (radians).
-fn arc(scene: &mut Scene, parent: NodeId, r: f32, a0: f32, a1: f32, w: f32, mat: &dyn Fn() -> Material) {
-    let n = ((a1 - a0).abs() * r * 3.0).ceil().max(4.0) as usize;
-    let p = |k: usize| {
+/// The sun's own circle (イリオス is ἥλιος, the sun), and it "controls time". From the centre: a
+/// rayed sun, a {12/5} star lattice, a quiet band with the credits written along its lower arc,
+/// five rune circles with arrows inside a ring of spikes, the clock numerals (they tick once
+/// a beat), a band of time-runes, a graduated scale, the outer ring with a light running round
+/// it, the eight moon phases, and a great eight-pointed star that is larger than the frame.
+/// Every part is drawn by a sweep, layers turn at their own speeds and sit at their own depths,
+/// and the whole disc sways a little, so the depths slide against each other.
+struct MagicCircle {
+    root: NodeId,
+    pieces: Vec<Piece>,
+    /// (layer group, radians per second of `clock`).
+    spin: Vec<(NodeId, f32)>,
+    numerals: NodeId,
+}
+
+const WARM: u32 = 0xffe6cf;
+
+/// A flat band between radii `r0` and `r1` from angle `a0` to `a1`, as triangles.
+fn band(r0: f32, r1: f32, a0: f32, a1: f32) -> Vec<Vec3> {
+    let n = ((a1 - a0).abs() / deg(2.0)).ceil().max(1.0) as usize;
+    let p = |r: f32, k: usize| {
         let a = a0 + (a1 - a0) * k as f32 / n as f32;
         Vec3::new(a.cos() * r, a.sin() * r, 0.0)
     };
-    for k in 0..n {
-        scene.add_to(parent, line(p(k), p(k + 1), w, mat()));
+    (0..n).flat_map(|k| [p(r0, k), p(r1, k), p(r1, k + 1), p(r0, k), p(r1, k + 1), p(r0, k + 1)]).collect()
+}
+
+/// A flat hairline from `a` to `b`, as triangles.
+fn stroke(a: Vec3, b: Vec3, w: f32) -> Vec<Vec3> {
+    let d = (b - a).normalize_or_zero();
+    let n = Vec3::new(-d.y, d.x, 0.0) * w * 0.5;
+    vec![a - n, a + n, b + n, a - n, b + n, b - n]
+}
+
+fn polar(a: f32, r: f32) -> Vec3 {
+    Vec3::new(a.cos() * r, a.sin() * r, 0.0)
+}
+
+/// A filled dot.
+fn dot(c: Vec3, r: f32) -> Vec<Vec3> {
+    band(0.0, r, 0.0, std::f32::consts::TAU).into_iter().map(|p| p + c).collect()
+}
+
+/// A filled rhombus, its long axis along `a`.
+fn diamond(c: Vec3, a: f32, long: f32, short: f32) -> Vec<Vec3> {
+    let (u, v) = (polar(a, long), polar(a + deg(90.0), short));
+    vec![c + u, c + v, c - u, c + u, c - u, c - v]
+}
+
+struct Draft<'a> {
+    scene: &'a mut Scene,
+    pieces: Vec<Piece>,
+}
+
+impl Draft<'_> {
+    fn geo(&mut self, parent: NodeId, geo: Geometry, layer: f32, delay: f32, gain: f32, color: u32) -> NodeId {
+        let node = self.scene.add_to(parent, Node::mesh(geo, Material::glow(Rgb::hex(color), 0.0).double_sided()));
+        self.pieces.push(Piece { node, layer, delay, gain, color, ang: f32::NAN });
+        node
+    }
+
+    fn tris(&mut self, parent: NodeId, tris: Vec<Vec3>, layer: f32, delay: f32, gain: f32, color: u32) -> NodeId {
+        self.geo(parent, Geometry::from_triangles(&tris), layer, delay, gain, color)
+    }
+
+    /// A ring drawn by a sweep that starts at angle `from` at `delay` and takes `sweep` seconds.
+    /// `orbit`: a light runs round it afterwards.
+    #[allow(clippy::too_many_arguments)]
+    fn ring(&mut self, parent: NodeId, r: f32, w: f32, layer: f32, delay: f32, sweep: f32, from: f32, gain: f32, orbit: bool) {
+        use std::f32::consts::TAU;
+        let n = 36;
+        for k in 0..n {
+            let (a0, a1) = (from + TAU * k as f32 / n as f32, from + TAU * (k + 1) as f32 / n as f32);
+            let at = delay + sweep * k as f32 / n as f32;
+            self.tris(parent, band(r - w * 0.5, r + w * 0.5, a0, a1), layer, at, gain, LILAC);
+            if orbit {
+                self.pieces.last_mut().unwrap().ang = 0.5 * (a0 + a1);
+            }
+        }
+    }
+
+    /// A character set upright at the origin, `size` tall; returns it with its advance.
+    fn glyph(font: &[u8], ch: char, size: f32) -> (Option<Geometry>, f32) {
+        match Geometry::text_glyphs(font, &ch.to_string(), 1.0, 0.01, 0.0).ok().and_then(|g| g.into_iter().next()) {
+            Some(g) => (Some(g.geometry.scale(size, size, 1.0)), g.advance * size),
+            None => (None, 0.3 * size),
+        }
+    }
+
+    /// Characters spaced evenly round a ring, their feet toward the centre... of the page: the
+    /// tops point outward. One piece per character, drawn in turn.
+    #[allow(clippy::too_many_arguments)]
+    fn text_on_ring(&mut self, parent: NodeId, chars: &[&str], rr: f32, size: f32, offset: f32, layer: f32, delay: f32, sweep: f32, gain: f32) {
+        use std::f32::consts::TAU;
+        let n = chars.len();
+        for (i, ch) in chars.iter().enumerate() {
+            let a = offset + TAU * i as f32 / n as f32;
+            let Ok(geo) = Geometry::text(crate::world::lyric_font(), ch, 1.0, 0.01, 0.0) else { continue };
+            let width = geo.bounds().size().x * size;
+            let rot = Quat::from_rotation_z(a - deg(90.0));
+            let p = polar(a, rr) + rot * Vec3::new(-width * 0.5, -size * 0.35, 0.0);
+            let geo = geo.scale(size, size, 1.0).rotate(rot).translate(p.x, p.y, p.z);
+            self.geo(parent, geo, layer, delay + sweep * i as f32 / n as f32, gain, LILAC);
+        }
     }
 }
 
 impl MagicCircle {
-    fn build(scene: &mut Scene, centre: Vec3, r: f32) -> Self {
-        use std::f32::consts::{FRAC_PI_2 as PI_2, PI as PI_1, TAU};
+    /// `credits`: write the vocal and music credits along the lower arc of the quiet band,
+    /// starting this many seconds after the circle starts drawing.
+    fn build(scene: &mut Scene, centre: Vec3, r: f32, credits: Option<f32>) -> Self {
+        use std::f32::consts::TAU;
         let root = scene.add(Node::group().with_position(centre));
-        let glow = || Material::glow(Rgb::hex(LILAC), 0.0).double_sided();
-        let ring = |scene: &mut Scene, parent: NodeId, rr: f32, w: f32| {
-            scene.add_to(parent, Node::mesh(Geometry::ring(rr - w, rr + w, 200), glow()));
-        };
-        let text_on_ring = |scene: &mut Scene, parent: NodeId, chars: &[&str], rr: f32, size: f32, offset: f32| {
-            let n = chars.len();
-            for (i, ch) in chars.iter().enumerate() {
-                let a = offset + TAU * i as f32 / n as f32;
-                let Ok(geo) = Geometry::text(crate::world::lyric_font(), ch, 1.0, 0.01, 0.0) else { continue };
-                let width = geo.bounds().size().x * size;
-                let rot = Quat::from_rotation_z(a - deg(90.0));
-                let p = Vec3::new(a.cos() * rr, a.sin() * rr, 0.0);
-                scene.add_to(
-                    parent,
-                    Node::mesh(geo, glow()).with_position(p + rot * Vec3::new(-width * 0.5, -size * 0.35, 0.0)).with_rotation(rot).scaled(size),
-                );
-            }
-        };
-        let mut layers = Vec::new();
+        let mut d = Draft { scene, pieces: Vec::new() };
+        let mut spin = Vec::new();
+        let hair = r * 0.0022;
+        let up = deg(90.0);
 
-        // 0: core — double ring and two crescents.
-        let core = scene.add_to(root, Node::group().at(0.0, 0.0, 0.3));
-        ring(scene, core, r * 0.1, 0.012);
-        ring(scene, core, r * 0.075, 0.008);
-        arc(scene, core, r * 0.16, deg(200.0), deg(340.0), 0.014, &glow);
-        arc(scene, core, r * 0.16, deg(20.0), deg(160.0), 0.014, &glow);
-        layers.push((core, 0.0));
+        // 0: the sun. A bright heart, two rings and sixteen rays, long and short in turn.
+        let sun = d.scene.add_to(root, Node::group().at(0.0, 0.0, 0.6));
+        d.tris(sun, dot(Vec3::ZERO, r * 0.022), 0.0, 0.0, 1.6, WARM);
+        d.ring(sun, r * 0.055, hair * 1.2, 0.0, 0.0, 0.3, up, 1.2, false);
+        d.ring(sun, r * 0.092, hair * 1.6, 0.0, 0.05, 0.4, up, 1.2, false);
+        for i in 0..16 {
+            let a = TAU * i as f32 / 16.0;
+            let tip = r * if i % 2 == 0 { 0.2 } else { 0.15 };
+            let half = deg(if i % 2 == 0 { 7.0 } else { 5.0 });
+            let mut t = stroke(polar(a - half, r * 0.105), polar(a, tip), hair);
+            t.extend(stroke(polar(a + half, r * 0.105), polar(a, tip), hair));
+            d.tris(sun, t, 0.3, 0.25 + 0.02 * i as f32, if i % 2 == 0 { 1.0 } else { 0.7 }, WARM);
+        }
+        spin.push((sun, 0.1));
 
-        // 1: {12/5} star lattice in its ring.
-        let lattice = scene.add_to(root, Node::group().at(0.0, 0.0, 0.18));
-        ring(scene, lattice, r * 0.42, 0.01);
-        let lp: Vec<Vec3> = (0..12).map(|i| { let a = TAU * i as f32 / 12.0; Vec3::new(a.cos(), a.sin(), 0.0) * r * 0.42 }).collect();
+        // 1: {12/5} star lattice in its ring, a node at every point.
+        let lattice = d.scene.add_to(root, Node::group().at(0.0, 0.0, 0.36));
+        d.ring(lattice, r * 0.26, hair, 1.0, 0.25, 0.7, up, 0.9, false);
+        let lp: Vec<Vec3> = (0..12).map(|i| polar(TAU * i as f32 / 12.0, r * 0.26)).collect();
         for i in 0..12 {
-            scene.add_to(lattice, line(lp[i], lp[(i + 5) % 12], 0.009, glow()));
-            // A node at every point of the star.
-            scene.add_to(lattice, Node::mesh(Geometry::ring(r * 0.012, r * 0.02, 32), glow()).with_position(lp[i]));
+            d.tris(lattice, stroke(lp[i], lp[(i + 5) % 12], hair * 0.8), 1.0, 0.4 + 0.05 * i as f32, 0.55, LILAC);
+            let mut node = band(r * 0.013, r * 0.013 + hair, 0.0, TAU);
+            node.extend(dot(Vec3::ZERO, r * 0.005));
+            d.tris(lattice, node.into_iter().map(|p| p + lp[i]).collect(), 1.0, 0.4 + 0.05 * i as f32, 1.3, STAR);
         }
-        layers.push((lattice, 1.0));
+        spin.push((lattice, -0.07));
 
-        // 2: five small circles with arrows between, inside a ring of twelve outward spikes.
-        let pentad = scene.add_to(root, Node::group().at(0.0, 0.0, 0.06));
-        for j in 0..5 {
-            let a = deg(90.0) + TAU * j as f32 / 5.0;
-            let c = Vec2::from_angle(a) * r * 0.54;
-            scene.add_to(pentad, Node::mesh(Geometry::ring(r * 0.06 - 0.01, r * 0.06 + 0.01, 72), glow()).at(c.x, c.y, 0.0));
-            // A rune in each circle (one per corner of the pentad).
-            if let Ok(geo) = Geometry::text(crate::world::lyric_font(), ["時", "刻", "巡", "環", "夢"][j], 1.0, 0.01, 0.0) {
-                let size = r * 0.06;
-                let w = geo.bounds().size().x * size;
-                scene.add_to(pentad, Node::mesh(geo, glow()).at(c.x - w * 0.5, c.y - size * 0.36, 0.0).scaled(size));
+        // 2: the quiet band. It does not turn. The credits are written along its lower arc
+        // and a row of dots fills the rest.
+        let quiet = d.scene.add_to(root, Node::group().at(0.0, 0.0, 0.2));
+        d.ring(quiet, r * 0.475, hair, 2.0, 0.45, 0.8, -up, 0.9, false);
+        d.ring(quiet, r * 0.605, hair, 2.0, 0.5, 0.8, up, 0.9, false);
+        let mut span = 0.0_f32;
+        if let Some(at) = credits {
+            // (text, size, tracking, gain); an empty text is the red diamond between the two.
+            let runs: [(&str, f32, f32, f32); 5] = [
+                ("VOCAL", 0.03, 0.42, 1.25),
+                ("Nenne", 0.066, 0.14, 2.3),
+                ("", 0.0, 0.0, 0.0),
+                ("*Luna", 0.066, 0.14, 2.3),
+                ("MUSIC", 0.03, 0.42, 1.25),
+            ];
+            let gap = |k: usize| r * if k == 1 || k == 2 { 0.075 } else { 0.045 };
+            // Lay the runs out on a straight line first, then bend the line onto the arc.
+            let mut placed: Vec<(Option<Geometry>, f32, f32, usize)> = Vec::new();
+            let mut pen = 0.0;
+            for (k, (text, size, track, gain)) in runs.iter().enumerate() {
+                if text.is_empty() {
+                    placed.push((None, pen, 0.0, k));
+                } else {
+                    for ch in text.chars() {
+                        let (geo, adv) = Draft::glyph(crate::world::LABEL_FONT, ch, r * size);
+                        placed.push((geo, pen, *gain, k));
+                        pen += adv + r * size * track;
+                    }
+                    pen -= r * size * track;
+                }
+                if k + 1 < runs.len() {
+                    pen += gap(k);
+                }
             }
-            let b = a + TAU / 10.0;
-            let tip = Vec3::new(b.cos(), b.sin(), 0.0) * r * 0.62;
-            let l = Vec3::new((b - 0.09).cos(), (b - 0.09).sin(), 0.0) * r * 0.5;
-            let rr = Vec3::new((b + 0.09).cos(), (b + 0.09).sin(), 0.0) * r * 0.5;
-            scene.add_to(pentad, line(l, tip, 0.01, glow()));
-            scene.add_to(pentad, line(rr, tip, 0.01, glow()));
+            let rb = r * 0.568;
+            span = pen / rb;
+            let a_start = -up - span * 0.5;
+            let mut n = 0;
+            for (geo, x, gain, k) in placed {
+                let a = a_start + x / rb;
+                let Some(geo) = geo else {
+                    d.tris(quiet, diamond(polar(a, r * 0.54), a, r * 0.016, r * 0.007), 2.0, at + 0.3, 1.6, RED_HOT);
+                    continue;
+                };
+                let p = polar(a, rb);
+                let geo = geo.rotate_z(a + up).translate(p.x, p.y, 0.0);
+                d.geo(quiet, geo, 2.0, at + 0.035 * n as f32 + if k > 2 { 0.25 } else { 0.0 }, gain, STAR);
+                n += 1;
+            }
+            span += deg(9.0);
         }
-        ring(scene, pentad, r * 0.66, 0.01);
+        for sector in 0..24 {
+            let mut t = Vec::new();
+            for q in 0..5 {
+                let i = sector * 5 + q;
+                let a = up + TAU * i as f32 / 120.0;
+                // Angle from straight down; the credits own the arc round it.
+                let from_bottom = (a + up).rem_euclid(TAU);
+                let from_bottom = from_bottom.min(TAU - from_bottom);
+                if from_bottom < span * 0.5 {
+                    continue;
+                }
+                if i % 5 == 0 {
+                    t.extend(diamond(polar(a, r * 0.54), a, r * 0.011, r * 0.005));
+                } else {
+                    t.extend(dot(polar(a, r * 0.54), r * 0.0028));
+                }
+            }
+            if !t.is_empty() {
+                d.tris(quiet, t, 2.0, 0.6 + 0.035 * sector as f32, 0.9, LILAC);
+            }
+        }
+        if credits.is_some() {
+            for side in [-1.0_f32, 1.0] {
+                let a = -up + side * span * 0.5;
+                d.tris(quiet, diamond(polar(a, r * 0.54), a, r * 0.014, r * 0.006), 2.0, 1.4, 1.5, RED_HOT);
+            }
+        }
+
+        // 3: five rune circles joined by arcs and arrows, inside a ring of twelve spikes.
+        let pentad = d.scene.add_to(root, Node::group().at(0.0, 0.0, 0.0));
+        let (pr, pc) = (r * 0.69, r * 0.048);
+        for j in 0..5 {
+            let a = up + TAU * j as f32 / 5.0;
+            let c = polar(a, pr);
+            let at = 0.7 + 0.08 * j as f32;
+            d.tris(pentad, band(pc - hair * 0.6, pc + hair * 0.6, 0.0, TAU).into_iter().map(|p| p + c).collect(), 3.0, at, 1.1, LILAC);
+            if let Ok(geo) = Geometry::text(crate::world::lyric_font(), ["時", "刻", "巡", "環", "夢"][j], 1.0, 0.01, 0.0) {
+                let size = r * 0.048;
+                let w = geo.bounds().size().x * size;
+                d.geo(pentad, geo.scale(size, size, 1.0).translate(c.x - w * 0.5, c.y - size * 0.36, 0.0), 3.0, at + 0.15, 1.2, STAR);
+            }
+            // The arc on to the next circle, with an arrowhead halfway.
+            let reach = (pc / pr).asin() * 1.25;
+            let mut t = band(pr - hair * 0.4, pr + hair * 0.4, a + reach, a + TAU / 5.0 - reach);
+            let b = a + TAU / 10.0;
+            let tip = polar(b + 0.035, pr);
+            t.extend(stroke(polar(b - 0.03, pr + r * 0.016), tip, hair));
+            t.extend(stroke(polar(b - 0.03, pr - r * 0.016), tip, hair));
+            d.tris(pentad, t, 3.0, at + 0.1, 0.7, LILAC);
+        }
+        d.ring(pentad, r * 0.75, hair, 3.0, 0.8, 0.8, up, 0.9, false);
         for i in 0..12 {
             let a = TAU * i as f32 / 12.0;
-            let d = |o: f32, rr: f32| Vec3::new((a + o).cos(), (a + o).sin(), 0.0) * rr;
-            scene.add_to(pentad, line(d(-0.07, r * 0.66), d(0.0, r * 0.72), 0.01, glow()));
-            scene.add_to(pentad, line(d(0.07, r * 0.66), d(0.0, r * 0.72), 0.01, glow()));
+            let mut t = stroke(polar(a - 0.06, r * 0.75), polar(a, r * 0.795), hair);
+            t.extend(stroke(polar(a + 0.06, r * 0.75), polar(a, r * 0.795), hair));
+            d.tris(pentad, t, 3.0, 0.9 + 0.04 * i as f32, 0.9, LILAC);
         }
-        layers.push((pentad, 2.0));
+        spin.push((pentad, 0.12));
 
-        // 3: clock numerals between two rings (they tick once a beat).
-        let numerals = scene.add_to(root, Node::group().at(0.0, 0.0, 0.0));
-        ring(scene, numerals, r * 0.74, 0.01);
-        ring(scene, numerals, r * 0.82, 0.01);
-        text_on_ring(scene, numerals, &["十二", "一", "二", "三", "四", "五", "六", "七", "八", "九", "十", "十一"], r * 0.78, r * 0.045, deg(90.0));
-        layers.push((numerals, 3.0));
+        // 4: clock numerals between two rings (they tick once a beat).
+        let numerals = d.scene.add_to(root, Node::group().at(0.0, 0.0, -0.2));
+        d.ring(numerals, r * 0.815, hair, 4.0, 0.9, 0.8, up, 0.9, false);
+        d.ring(numerals, r * 0.887, hair, 4.0, 0.95, 0.8, -up, 0.9, false);
+        d.text_on_ring(numerals, &["十二", "一", "二", "三", "四", "五", "六", "七", "八", "九", "十", "十一"], r * 0.851, r * 0.042, up, 4.0, 1.1, -0.6, 1.2);
 
-        // 4: a band of small time-runes.
-        let runes = scene.add_to(root, Node::group().at(0.0, 0.0, -0.12));
-        let rune_chars: Vec<&str> = "時刻巡環永遠夢願星月鉄音".chars().cycle().take(48).map(|c| {
-            // leak-free: index into a static string
-            let s: &'static str = Box::leak(c.to_string().into_boxed_str());
-            s
-        }).collect();
-        text_on_ring(scene, runes, &rune_chars, r * 0.86, r * 0.026, 0.0);
-        ring(scene, runes, r * 0.895, 0.008);
-        layers.push((runes, 4.0));
+        // 5: a band of small time-runes.
+        let runes = d.scene.add_to(root, Node::group().at(0.0, 0.0, -0.4));
+        let rune_chars: Vec<String> = "時刻巡環永遠夢願星月鉄音".chars().cycle().take(48).map(|c| c.to_string()).collect();
+        let rune_refs: Vec<&str> = rune_chars.iter().map(String::as_str).collect();
+        d.text_on_ring(runes, &rune_refs, r * 0.915, r * 0.022, 0.0, 5.0, 1.2, 0.9, 0.8);
+        spin.push((runes, 0.05));
 
-        // 5: hatched band.
-        let hatch = scene.add_to(root, Node::group().at(0.0, 0.0, -0.22));
-        ring(scene, hatch, r * 0.91, 0.01);
-        ring(scene, hatch, r * 0.95, 0.01);
-        for i in 0..144 {
-            let a = TAU * i as f32 / 144.0;
-            let d = Vec3::new(a.cos(), a.sin(), 0.0);
-            scene.add_to(hatch, line(d * r * 0.915, d * r * 0.945, 0.008, glow()));
+        // 6: a graduated scale, like the rim of an astrolabe: a tick every two degrees, a
+        // longer one every ten.
+        let scale = d.scene.add_to(root, Node::group().at(0.0, 0.0, -0.6));
+        d.ring(scale, r * 0.945, hair, 6.0, 1.1, 0.9, up, 0.9, false);
+        for sector in 0..36 {
+            let mut t = Vec::new();
+            for q in 0..5 {
+                let a = up + TAU * (sector * 5 + q) as f32 / 180.0;
+                t.extend(stroke(polar(a, r * 0.95), polar(a, r * if q == 0 { 0.985 } else { 0.968 }), hair * 0.8));
+            }
+            d.tris(scale, t, 6.0, 1.2 + 0.025 * sector as f32, 0.8, LILAC);
         }
-        layers.push((hatch, 5.0));
+        spin.push((scale, -0.02));
 
-        // 6: outer ring with eight small circles riding on it.
-        let riders = scene.add_to(root, Node::group().at(0.0, 0.0, -0.34));
-        ring(scene, riders, r, 0.014);
+        // 7: the outer ring (a light runs round it) and the eight phases of the moon riding
+        // outside it, the lit part of each filled.
+        let riders = d.scene.add_to(root, Node::group().at(0.0, 0.0, -0.8));
+        d.ring(riders, r, hair * 2.2, 7.0, 1.2, 1.0, up, 1.2, true);
         for j in 0..8 {
-            let a = TAU * j as f32 / 8.0;
-            let c = Vec2::from_angle(a) * r * 0.975;
-            // Moon ring: the eight phases, each a circle with its terminator arc.
-            let moon = scene.add_to(riders, Node::group().at(c.x, c.y, 0.0));
-            let mr = r * 0.045;
-            scene.add_to(moon, Node::mesh(Geometry::ring(mr - 0.01, mr + 0.01, 72), glow()));
+            let a = up - TAU * j as f32 / 8.0;
+            let mr = r * 0.04;
+            let c = polar(a, r + mr + hair);
+            let mut t = band(mr - hair * 0.5, mr + hair * 0.5, 0.0, TAU);
+            // Phase j of 8: new, waxing crescent, first quarter ... The terminator is half an
+            // ellipse; the lit part lies between it and the limb on the lit side.
             let phase = j as f32 / 8.0;
-            let bulge = (phase * TAU).cos();
-            let pts: Vec<Vec3> = (0..=16)
-                .map(|q| {
-                    let a = -PI_2 + PI_1 * q as f32 / 16.0;
-                    Vec3::new(a.cos() * mr * bulge, a.sin() * mr, 0.0)
-                })
-                .collect();
+            let lit_right = phase < 0.5;
+            let k = (phase * TAU).cos(); // 1 new, -1 full
+            let side = if lit_right { 1.0 } else { -1.0 };
             for q in 0..16 {
-                scene.add_to(moon, line(pts[q], pts[q + 1], 0.012, glow()));
+                let y = |q: usize| -up + deg(180.0) * q as f32 / 16.0;
+                let limb = |q: usize| Vec3::new(side * y(q).cos() * mr, y(q).sin() * mr, 0.0);
+                let term = |q: usize| Vec3::new(side * y(q).cos() * mr * k, y(q).sin() * mr, 0.0);
+                t.extend([limb(q), term(q), term(q + 1), limb(q), term(q + 1), limb(q + 1)]);
+            }
+            d.tris(riders, t.into_iter().map(|p| p + c).collect(), 7.0, 1.5 + 0.07 * j as f32, 0.42, STAR);
+        }
+        spin.push((riders, -0.03));
+
+        // 8: a great eight-pointed star of two squares round everything, larger than the frame,
+        // with a circle on each point and a faint ring through them.
+        let star = d.scene.add_to(root, Node::group().at(0.0, 0.0, -1.4));
+        let sr = r * 1.62;
+        for sq in 0..2 {
+            for i in 0..4 {
+                let a = deg(45.0) * sq as f32 + TAU * i as f32 / 4.0;
+                let (p, q) = (polar(a, sr), polar(a + TAU / 4.0, sr));
+                // Stop short of the circles on the points.
+                let (p, q) = (p.lerp(q, 0.03), q.lerp(p, 0.03));
+                d.tris(star, stroke(p, q, hair * 1.2), 8.0, 1.5 + 0.1 * (sq * 4 + i) as f32, 0.5, LILAC);
+                d.tris(star, band(r * 0.05 - hair * 0.5, r * 0.05 + hair * 0.5, 0.0, TAU).into_iter().map(|v| v + polar(a, sr)).collect(),
+                    8.0, 1.6 + 0.1 * (sq * 4 + i) as f32, 1.0, LILAC);
+                d.tris(star, dot(polar(a, sr), r * 0.012), 8.0, 1.6 + 0.1 * (sq * 4 + i) as f32, 1.4, STAR);
             }
         }
-        layers.push((riders, 6.0));
+        d.ring(star, r * 1.146, hair, 8.0, 1.4, 1.0, 0.0, 0.5, false);
+        d.ring(star, sr, hair, 8.0, 1.7, 1.2, 0.0, 0.5, true);
+        spin.push((star, 0.015));
 
+        let pieces = d.pieces;
         scene[root].visible = false;
-        Self { root, layers, numerals, runes, lattice, pentad, riders }
+        Self { root, pieces, spin, numerals }
     }
 
     /// `on` 0..1, `clock` the time it turns on (stops while time stops), `ticks` beats the
-    /// numerals have advanced, `glow` base brightness (dim), `pulse` the travelling glow
-    /// time since the last pulse began (seconds), `appear_t` time since it started drawing.
+    /// numerals have advanced, `glow` base brightness, `pulse_since` seconds since a glow last
+    /// set out from the centre, `appear_t` seconds since it started drawing.
+    #[allow(clippy::too_many_arguments)]
     fn pose(&self, s: &mut Scene, on: f32, clock: f32, ticks: f32, glow: f32, pulse_since: f32, appear_t: f32) {
+        use std::f32::consts::TAU;
         s[self.root].visible = on > 0.003;
         if !s[self.root].visible {
             return;
         }
-        for (layer, k) in &self.layers {
-            let d = expo_out(clamp01((appear_t - k * 0.1) / 1.0));
+        // The disc sways, so its layers (each at its own depth) slide against each other.
+        s[self.root].rotation = Quat::from_rotation_x(0.04 * (clock * 0.37).sin()) * Quat::from_rotation_y(0.06 * (clock * 0.29 + 1.0).sin());
+        let head = clock * 0.9;
+        for p in &self.pieces {
+            let since = appear_t - p.delay;
+            let visible = since > 0.0;
+            s[p.node].visible = visible;
+            if !visible {
+                continue;
+            }
+            // Drawn bright, then it settles.
+            let drawn = ease_out(since / 0.25);
+            let flash = (-since / 0.45).exp();
             // A glow that travels outward through the layers, then fades.
-            let since = pulse_since - k * 0.09;
-            let pulse = if since >= 0.0 { (-since / 0.45).exp() * ease_out(since / 0.06) } else { 0.0 };
-            s[*layer].scale = Vec3::splat(0.8 + 0.2 * d);
-            let c = Rgb::hex(LILAC) * (on * d * (glow + 1.6 * pulse));
-            for id in std::iter::once(*layer).chain(s.descendants(*layer)) {
-                if let Some(m) = s[id].material_mut() {
-                    if m.blending == Blending::Additive {
-                        m.color = c;
-                    } else {
-                        m.opacity = on * d;
-                    }
-                }
+            let ps = pulse_since - p.layer * 0.09;
+            let pulse = if ps >= 0.0 { (-ps / 0.45).exp() * ease_out(ps / 0.06) } else { 0.0 };
+            let mut b = glow + 1.5 * pulse + 2.4 * flash;
+            if p.ang.is_finite() {
+                // The running light: bright at its head, a tail behind it.
+                let behind = (head - p.ang).rem_euclid(TAU);
+                b += 2.6 * (-behind / 0.7).exp();
+            }
+            if let Some(m) = s[p.node].material_mut() {
+                m.color = Rgb::hex(p.color) * (on * drawn * p.gain * b);
             }
         }
+        for (group, speed) in &self.spin {
+            s[*group].rotation = Quat::from_rotation_z(clock * speed);
+        }
         s[self.numerals].rotation = Quat::from_rotation_z(-deg(6.0) * ticks);
-        s[self.runes].rotation = Quat::from_rotation_z(clock * 0.05);
-        s[self.lattice].rotation = Quat::from_rotation_z(-clock * 0.07);
-        s[self.pentad].rotation = Quat::from_rotation_z(clock * 0.12);
-        s[self.riders].rotation = Quat::from_rotation_z(-clock * 0.03);
     }
 }
 
@@ -352,7 +553,7 @@ pub fn mix(t: f32) -> Mix {
     let title_circle = window(t, BAND_IN - 0.05, VERSE_1 - 0.5, 0.8);
     let ruler = window(t, PRE_1 + 0.2, BLUE_WORLD - 0.9, 0.4);
     // The circles are no longer the subject: the title keeps a faint one, the choruses none.
-    let (dial, title_circle, ruler) = (dial * 0.0, title_circle * 0.3, ruler * 0.0);
+    let (dial, title_circle, ruler) = (dial * 0.0, title_circle * 0.7, ruler * 0.0);
     Mix { stars, dial, gem, title_circle, ruler }
 }
 
@@ -448,8 +649,8 @@ impl Graphics {
         }
 
         // Magic circles.
-        let title_circle = MagicCircle::build(scene, Vec3::new(0.0, 1.0, 9.0), 6.4);
-        let chorus_circle = MagicCircle::build(scene, Vec3::new(0.0, 0.0, 1.4), DIAL_R * 1.25);
+        let title_circle = MagicCircle::build(scene, Vec3::new(0.0, 1.0, 9.0), 6.4, Some(CREDITS_AT - BAND_IN));
+        let chorus_circle = MagicCircle::build(scene, Vec3::new(0.0, 0.0, 1.4), DIAL_R * 1.25, None);
 
         // Sound rings.
         let rings = (0..6)

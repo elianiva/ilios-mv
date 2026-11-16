@@ -20,7 +20,7 @@ pub fn lyric_font() -> &'static [u8] {
         std::env::var_os("ILIOS_FONT").map_or_else(|| FONT_BYTES.to_vec(), |path| std::fs::read(&path).expect("ILIOS_FONT"))
     })
 }
-const LABEL_FONT: &[u8] = include_bytes!("../media/ShipporiMincho-Medium.ttf");
+pub(crate) const LABEL_FONT: &[u8] = include_bytes!("../media/ShipporiMincho-Medium.ttf");
 /// Box plates are drawn in this colour behind boxed glyphs; boxed glyphs turn dark.
 const INK: u32 = 0x150e1a;
 
@@ -1008,14 +1008,14 @@ impl World {
                 let mut pen = -total * 0.5;
                 for (k, c) in sub.chars().enumerate() {
                     if let Some((geo, _)) = glyph_in(true, c) {
-                        let node = text_scene.add_to(group, Node::mesh(geo, Material::unlit(Rgb::hex(LILAC)).transparent().opacity(0.0))
+                        let node = text_scene.add_to(group, Node::mesh(geo, Material::unlit(Rgb::hex(0xe4d2d7)).transparent().opacity(0.0))
                             .with_position(Vec3::new(pen, -size * 0.95, 0.0))
                             .scaled(rs)
                             .hidden());
                         let at = BAND_IN + 4.0 * BEAT + k as f32 * 0.05;
                         glyphs.push(GlyphInst { kind: Kind::Main, plate: None, tilt: 0.0, scatter: Vec3::ZERO, node, line: li, appear: at,
-                            word_start: at, word_end: at + 0.5, base: Vec3::new(pen, -size * 0.95, 0.0), color: Rgb::hex(LILAC),
-                            plate_color: Rgb::hex(LILAC), slam: false, cluster: None, accent: None, width: 0.0, ch: ' ' });
+                            word_start: at, word_end: at + 0.5, base: Vec3::new(pen, -size * 0.95, 0.0), color: Rgb::hex(0xe4d2d7),
+                            plate_color: Rgb::hex(0xe4d2d7), slam: false, cluster: None, accent: None, width: 0.0, ch: ' ' });
                     }
                     pen += advs[k];
                 }

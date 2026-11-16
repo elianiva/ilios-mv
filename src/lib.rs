@@ -209,14 +209,17 @@ fn hud<'a>(t: f32, op: f32) -> Svgr<'a> {
 
 /// The album cover's framing: four hairlines that cross near two corners, the title small at
 /// the bottom right with the cover's red rule, and the credits set vertically on the sides.
-/// `bar` is the letterbox height in pixels; the frame stays inside it.
+/// `bar` is the letterbox height in pixels. The frame is laid out on the picture between the
+/// bars, so it grows and shrinks with them and never draws on the black.
 fn cover_frame<'a>(t: f32, op: f32, bar: f32) -> Svgr<'a> {
     let draw = |from: f32| ease_between(t, BAND_IN + from, BAND_IN + from + 2.4);
     if op <= 0.003 || t < BAND_IN {
         return Svgr::empty();
     }
     let labels = ease_out((t - VERSE_1) / 1.2);
-    let (top, bottom) = (bar + 62.0, 1080.0 - bar - 62.0);
+    // A height on the full 1080 frame, mapped onto the picture between the bars.
+    let y = |v: f32| bar + v * (1080.0 - 2.0 * bar) / 1080.0;
+    let (top, bottom) = (y(62.0), y(1018.0));
     let hair = |x1: f32, y1: f32, x2: f32, y2: f32, k: f32| {
         fframes::svgr!(<line x1={x1} y1={y1} x2={x1 + (x2 - x1) * k} y2={y1 + (y2 - y1) * k}
             stroke={TEXT} stroke-width="1" stroke-opacity="0.2" />)
@@ -224,9 +227,9 @@ fn cover_frame<'a>(t: f32, op: f32, bar: f32) -> Svgr<'a> {
     fframes::svgr!(
         <g opacity={op}>
             {hair(0.0, top, 820.0, top, draw(0.0))}
-            {hair(150.0, 0.0, 150.0, 700.0, draw(0.4))}
+            {hair(150.0, y(0.0), 150.0, y(700.0), draw(0.4))}
             {hair(1920.0, bottom, 1100.0, bottom, draw(0.8))}
-            {hair(1770.0, 1080.0, 1770.0, 380.0, draw(1.2))}
+            {hair(1770.0, y(1080.0), 1770.0, y(380.0), draw(1.2))}
             <g opacity={labels}>
                 <rect x="186" y={top - 33.0} width="96" height="2" fill={RED} />
                 <text x="310" y={top - 23.0} font-family={SERIF} font-weight="500" font-size="24" letter-spacing="7"
@@ -346,9 +349,6 @@ impl Video for IliosVideo<'_> {
         // End card on the first outro chime.
         let card = ease_out((t - CHIMES[0]) / 1.2) * (1.0 - ease_between(t, END - 3.0, END - 0.8));
         let card_rule = ease_out((t - CHIMES[0] - 0.4) / 1.4);
-        // Opening credits under the title, after its Latin name lands; gone before the push-in
-        // carries that name down onto them.
-        let credits = ease_out((t - 20.2) / 1.2) * (1.0 - ease_between(t, 23.6, 24.6));
         let rule = ease_out((t - 29.3) / 0.8);
         // The frame steps aside for the big moments (the wormhole, the CRT, the end card).
         // The old frame of corner marks and rulers is gone; the picture carries its own look now.
@@ -375,17 +375,6 @@ impl Video for IliosVideo<'_> {
                     <rect x={960.0 - 60.0 * card_rule} y="584" width={0.5 + 120.0 * card_rule} height="2" fill={RED} />
                     <text x="960" y="652" text-anchor="middle" font-family={SERIF} font-weight="500" font-size="40"
                         letter-spacing="10" fill={TEXT} fill-opacity="0.8">"Nenne  /  *Luna"</text>
-                </g>
-                <g opacity={credits}>
-                    <text x="790" y="914" text-anchor="middle" font-family={SERIF} font-weight="500" font-size="26"
-                        letter-spacing="8" fill={TEXT} fill-opacity="0.55">"VOCAL"</text>
-                    <text x="790" y="966" text-anchor="middle" font-family={SERIF} font-weight="500" font-size="42"
-                        letter-spacing="10" fill={TEXT} fill-opacity="0.85">"Nenne"</text>
-                    <rect x="959" y="908" width="2" height="60" fill={RED} fill-opacity="0.8" />
-                    <text x="1130" y="914" text-anchor="middle" font-family={SERIF} font-weight="500" font-size="26"
-                        letter-spacing="8" fill={TEXT} fill-opacity="0.55">"MUSIC"</text>
-                    <text x="1130" y="966" text-anchor="middle" font-family={SERIF} font-weight="500" font-size="42"
-                        letter-spacing="10" fill={TEXT} fill-opacity="0.85">"*Luna"</text>
                 </g>
                 {ctx.render_scenes(&frame)}
             </svg>
