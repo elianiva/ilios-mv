@@ -148,13 +148,26 @@ pub fn whip(x: f32) -> f32 {
 /// After the camera lands on a line it keeps gliding into it for this long.
 pub const SETTLE: f32 = 1.3;
 
-/// 届くはずのない願いを君は: time stops (camera, circles, dust, drift) until the fill.
+/// 届くはずのない願いを君は / 僕は: time stops (camera, circles, dust, drift) until the fill.
+/// The second is the first moved by the distance between the choruses.
 pub const TIME_STOP: (f32, f32) = (76.0, 80.55);
+pub const TIME_STOPS: [(f32, f32); 2] = [TIME_STOP, (TIME_STOP.0 + CHORUS_2 - CHORUS_1, TIME_STOP.1 + CHORUS_2 - CHORUS_1)];
+
+pub fn time_stopped(t: f32, margin: f32) -> bool {
+    TIME_STOPS.iter().any(|(a, b)| t >= a - margin && t < b + margin)
+}
 
 /// The clock the world runs on: it halts while time stops, then lurches back.
 pub fn world_clock(t: f32) -> f32 {
-    let (a, b) = TIME_STOP;
-    if t < a { t } else if t < b { a } else { t - (b - a) + 6.0 * expo_out((t - b) / 0.9) }
+    let mut c = t;
+    for (a, b) in TIME_STOPS {
+        if t >= b {
+            c += -(b - a) + 6.0 * expo_out((t - b) / 0.9);
+        } else if t >= a {
+            c -= t - a;
+        }
+    }
+    c
 }
 
 // Cues labeled by ear against the audio (tools/cues), in seconds.
@@ -164,6 +177,24 @@ pub const GUITAR: &[f32] = &[
     257.897, 258.091, 258.506, 258.795, 258.965, 259.114, 259.295, 259.437, 259.573, 259.693, 260.002, 260.265, 260.601, 261.479, 261.788, 262.078,
     262.397, 263.515, 263.903, 264.183, 265.332, 265.689,
 ];
+/// The pitch of each guitar pick (MIDI), estimated from the spectrum that appears after each
+/// onset. Three estimators (free-pitch harmonic sum, a vote over window sizes, a semitone
+/// template limited to the gap before the next pick) agree on 24 picks; the other 14 take the
+/// majority and are a best guess: picks 2, 4–8, 17, 18, 21, 27, 29, 30, 33, 36. The mix is
+/// about 7 cents sharp, and the line fits B♭ major / G minor.
+pub const GUITAR_NOTES: &[u8] = &[
+    54, 82, 60, 82, 82, 66, 58, 81, 58, 70, 72, 77, 70, 79, 79, 81, 77, 77, 69, 69, 69, 67, 65, 74, 60, 75, 60, 75, 58, 60,
+    74, 65, 74, 70, 67, 72, 67, 81,
+];
+const _: () = assert!(GUITAR_NOTES.len() == GUITAR.len());
+
+/// Where a note sits on a treble staff: diatonic steps above E4, the bottom line. Black
+/// keys are spelled as flats (the key is B♭ major).
+pub fn staff_step(midi: u8) -> f32 {
+    const LETTER: [i32; 12] = [0, 1, 1, 2, 2, 3, 4, 4, 5, 5, 6, 6];
+    let m = midi as i32;
+    ((m / 12 - 1) * 7 + LETTER[(m % 12) as usize] - 30) as f32
+}
 /// A single low note that lands like something dropped into water.
 pub const DROPS: &[f32] = &[2.298, 6.788, 9.502, 98.599, 102.191, 105.793, 109.395, 111.201, 114.782, 118.404, 272.464, 275.996, 279.209, 282.501];
 pub const KEYS: &[f32] = &[

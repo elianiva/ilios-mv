@@ -222,7 +222,8 @@ impl Video for IliosVideo<'_> {
     }
 
     fn audio(&self) -> AudioMap<'_> {
-        AudioMap::from([AudioTrack::new("audio.flac", Second(0.0)..Second(END))])
+        // The master peaks at +0.6 dBTP; 2 dB down keeps the encoded AAC under -1 dBTP.
+        AudioMap::from([AudioTrack::new("audio.flac", Second(0.0)..Second(END)).gain_db(-2.0)])
     }
 
     fn render_frame<'b>(&'b self, frame: Frame, ctx: &FFramesContext<'b, '_>) -> Svgr<'b> {
@@ -309,6 +310,9 @@ impl Video for IliosVideo<'_> {
         // End card on the first outro chime.
         let card = ease_out((t - CHIMES[0]) / 1.2) * (1.0 - ease_between(t, END - 3.0, END - 0.8));
         let card_rule = ease_out((t - CHIMES[0] - 0.4) / 1.4);
+        // Opening credits under the title, after its Latin name lands; gone before the push-in
+        // carries that name down onto them.
+        let credits = ease_out((t - 20.2) / 1.2) * (1.0 - ease_between(t, 23.6, 24.6));
         let rule = ease_out((t - 29.3) / 0.8);
         // The frame steps aside for the big moments (the wormhole, the CRT, the end card).
         // The old frame of corner marks and rulers is gone; the picture carries its own look now.
@@ -328,8 +332,19 @@ impl Video for IliosVideo<'_> {
                     <text x="960" y="548" text-anchor="middle" font-family={SERIF} font-weight="800" font-size="64"
                         letter-spacing="22" fill={TEXT}>"イリオス"</text>
                     <rect x={960.0 - 60.0 * card_rule} y="584" width={0.5 + 120.0 * card_rule} height="2" fill={RED} />
-                    <text x="960" y="636" text-anchor="middle" font-family={SERIF} font-weight="500" font-size="28"
-                        letter-spacing="8" fill={TEXT} fill-opacity="0.75">"Nenne  /  *Luna"</text>
+                    <text x="960" y="652" text-anchor="middle" font-family={SERIF} font-weight="500" font-size="40"
+                        letter-spacing="10" fill={TEXT} fill-opacity="0.8">"Nenne  /  *Luna"</text>
+                </g>
+                <g opacity={credits}>
+                    <text x="790" y="914" text-anchor="middle" font-family={SERIF} font-weight="500" font-size="26"
+                        letter-spacing="8" fill={TEXT} fill-opacity="0.55">"VOCAL"</text>
+                    <text x="790" y="966" text-anchor="middle" font-family={SERIF} font-weight="500" font-size="42"
+                        letter-spacing="10" fill={TEXT} fill-opacity="0.85">"Nenne"</text>
+                    <rect x="959" y="908" width="2" height="60" fill={RED} fill-opacity="0.8" />
+                    <text x="1130" y="914" text-anchor="middle" font-family={SERIF} font-weight="500" font-size="26"
+                        letter-spacing="8" fill={TEXT} fill-opacity="0.55">"MUSIC"</text>
+                    <text x="1130" y="966" text-anchor="middle" font-family={SERIF} font-weight="500" font-size="42"
+                        letter-spacing="10" fill={TEXT} fill-opacity="0.85">"*Luna"</text>
                 </g>
                 {ctx.render_scenes(&frame)}
             </svg>

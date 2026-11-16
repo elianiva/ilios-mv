@@ -99,10 +99,6 @@ enum Flow {
     Horizontal,
     /// Rows bottom to top (高く高く).
     Stack,
-    /// Letters laid out going away into depth; the camera travels along them (向かう).
-    Travel,
-    /// The same, coming toward us: the camera backs away as they arrive (迎える).
-    TravelBack,
     /// One word at a time, each deeper than the last: the camera flies through them.
     Punch,
     /// The same toward us: the camera retreats and each word arrives from behind it.
@@ -240,7 +236,7 @@ fn specs() -> Vec<LineSpec> {
         exit: 0.0,
         arc: false,
     };
-    let (h, v, st, tr) = (Flow::Horizontal, Flow::Vertical, Flow::Stack, Flow::Travel);
+    let (h, v, st, pu) = (Flow::Horizontal, Flow::Vertical, Flow::Stack, Flow::Punch);
     let (drop, slam, rise) = (Entrance::Drop, Entrance::Slam, Entrance::Rise);
     let mut out = vec![
         // 0-2 Verse 1.
@@ -257,13 +253,13 @@ fn specs() -> Vec<LineSpec> {
         line([-1.0, 1.5, -144.0], 0.0, 0.0, -6.0, h, 1.1, slam, shot(5.6, 48.0, 0.7)),
         line([0.5, 2.0, -158.0], 0.0, 0.0, 0.0, h, 0.82, drop, shot(5.6, 48.0, 1.0)),
         line([-1.5, 2.5, -172.0], 0.0, 0.0, 5.0, h, 0.85, drop, shot(5.6, 48.0, 0.95)),
-        line([0.0, 2.0, -186.0], 0.0, 0.0, 0.0, tr, 0.9, drop, shot(5.6, 48.0, 0.7)),
+        line([0.0, 2.0, -186.0], 0.0, 0.0, 0.0, pu, 0.9, drop, shot(5.6, 48.0, 0.7)),
         // 向こうへと向かうんだ: far ahead on the line of flight, and it only gets further away.
         line([0.5, 2.0, -244.0], 0.0, 0.0, 0.0, h, 3.0, drop, shot(5.6, 48.0, 0.0)),
-        // 13-15 Verse 2: laid out into the depth, each bending off from the last.
-        line([0.0, 10.0, -272.0], 0.0, 0.0, 0.0, tr, 0.62, drop, shot(6.0, 44.0, 1.6)),
-        line([1.0, 9.6, -300.0], 22.0, 0.0, 0.0, tr, 0.62, drop, shot(6.0, 44.0, 1.1)),
-        line([-5.8, 10.0, -321.0], -20.0, 0.0, 0.0, tr, 0.62, drop, shot(6.0, 44.0, 1.1)),
+        // 13-15 Verse 2: phrase after phrase into the depth, each line bending off from the last.
+        line([0.0, 10.0, -272.0], 0.0, 0.0, 0.0, pu, 0.8, drop, shot(6.0, 44.0, 1.6)),
+        line([1.0, 9.6, -300.0], 22.0, 0.0, 0.0, pu, 0.8, drop, shot(6.0, 44.0, 1.1)),
+        line([-5.8, 10.0, -321.0], -20.0, 0.0, 0.0, pu, 0.8, drop, shot(6.0, 44.0, 1.1)),
         // 16-18 Pre-chorus 2: the eyes drop to the town. Heavy.
         line([0.0, -4.0, -362.0], 0.0, -55.0, 0.0, h, 0.9, drop, shot(6.4, 46.0, 0.5)),
         line([-2.0, -5.0, -374.0], 0.0, -55.0, 6.0, h, 0.78, drop, shot(5.8, 44.0, 0.8)),
@@ -283,8 +279,8 @@ fn specs() -> Vec<LineSpec> {
         line([2.0, 1.2, -548.0], -10.0, 0.0, 0.0, h, 1.05, rise, shot(6.0, 44.0, 1.2)),
         line([-1.0, 2.4, -560.0], 4.0, 0.0, 0.0, h, 0.8, rise, shot(6.0, 42.0, 1.2)),
         // 31-33 Breakdown: a run at the wish star.
-        line([0.0, 1.0, -584.0], 0.0, 0.0, 0.0, tr, 0.55, drop, shot(6.4, 38.0, 1.8)),
-        line([0.6, 1.2, -614.0], -8.0, 0.0, 0.0, tr, 0.6, drop, shot(6.2, 40.0, 1.0)),
+        line([0.0, 1.0, -584.0], 0.0, 0.0, 0.0, pu, 0.8, drop, shot(6.4, 38.0, 1.8)),
+        line([0.6, 1.2, -614.0], -8.0, 0.0, 0.0, pu, 0.8, drop, shot(6.2, 40.0, 1.0)),
         line([4.2, 1.6, -645.0], -8.0, 0.0, 0.0, h, 1.2, slam, shot(7.4, 44.0, 0.8)),
         // 34-38 Last chorus: level with the horizon, where the dawn is. Then down, as it closes.
         line([0.0, 3.0, -666.0], 0.0, -6.0, 0.0, h, 0.72, slam, shot(6.8, 50.0, 0.45)),
@@ -621,6 +617,18 @@ fn pose_echo(ts: &mut Scene, p: NodeId, g: &GlyphInst, t: f32, opacity: f32) {
     }
 }
 
+/// A light that glows: a white-hot core and soft halos of its colour, each wider and fainter.
+fn glow(out: &mut Vec<Particle>, pos: Vec3, size: f32, color: Rgb, amt: f32) {
+    if amt <= 0.003 {
+        return;
+    }
+    out.push(Particle::new(pos, size * 0.55, Rgb::hex(0xffffff).lerp(color, 0.25) * (5.0 * amt)).opacity(amt));
+    out.push(Particle::new(pos, size, color * (3.0 * amt)).opacity(amt));
+    for (k, e) in [(2.6, 0.55), (5.0, 0.22), (9.5, 0.08)] {
+        out.push(Particle::new(pos, size * k, color * (e * amt)).opacity(e * amt));
+    }
+}
+
 fn window_f(t: f32, a: f32, b: f32, fade: f32) -> f32 {
     crate::graphics::window(t, a, b, fade)
 }
@@ -656,7 +664,7 @@ fn lead_row(word_start: f32) -> usize {
 
 /// Beat pulse in the choruses: 1 on a downbeat, less on beats 2 and 3, decaying.
 fn beat_pulse(t: f32) -> f32 {
-    let in_chorus = (t >= CHORUS_1 && t < 88.0 && !(TIME_STOP.0..TIME_STOP.1).contains(&t)) || (t >= CHORUS_2 && t < 172.0) || (t >= FINAL && t < 246.0);
+    let in_chorus = ((t >= CHORUS_1 && t < 88.0) || (t >= CHORUS_2 && t < 172.0) || (t >= FINAL && t < 246.0)) && !time_stopped(t, 0.0);
     if !in_chorus {
         return 0.0;
     }
@@ -850,7 +858,6 @@ impl World {
                         (0.0, -(ri as f32) * size * row_gap + (n_rows - 1.0) * size * row_gap * 0.5 - tallest * 0.35)
                     }
                     Flow::Stack => (0.0, ri as f32 * size * 1.9 - tallest * 0.35),
-                    Flow::Travel | Flow::TravelBack => (0.0, 0.0),
                     Flow::Punch | Flow::PunchBack => (0.0, -tallest * 0.35),
                 };
                 let mut pen = match spec.flow {
@@ -866,14 +873,8 @@ impl World {
                     }
                     let Some((geo, adv)) = glyph_in(false, *ch) else { continue };
                     let s = size * sc;
-                    let glyph_index = word_acc.values().map(|v| v.1).sum::<f32>();
                     let base = match spec.flow {
                         Flow::Vertical => Vec3::new(col_x - adv * s / 2.0, pen - s * 0.88, 0.0),
-                        Flow::Travel | Flow::TravelBack => Vec3::new(
-                            (glyph_index * 1.3).sin() * 1.5 - adv * s * 0.5,
-                            (glyph_index * 0.45).cos() * 0.4 - s * 0.36,
-                            if spec.flow == Flow::Travel { -glyph_index * 2.3 } else { glyph_index * 2.3 },
-                        ),
                         Flow::Punch => Vec3::new(pen, row_y, -(ri as f32) * PUNCH_D),
                         Flow::PunchBack => Vec3::new(pen, row_y, ri as f32 * PUNCH_D),
                         _ => Vec3::new(pen, row_y, 0.0),
@@ -1015,12 +1016,12 @@ impl World {
 
         // Shock rings: on the beat through the choruses (strong on the downbeat), and on a few
         // single hits.
-        let mut ripples: Vec<(f32, f32)> = vec![(TIME_STOP.1, 1.0), (90.1, 0.8), (BAND_BACK, 0.6), (174.17, 0.8), (188.57, 0.8)];
+        let mut ripples: Vec<(f32, f32)> = vec![(TIME_STOPS[0].1, 1.0), (TIME_STOPS[1].1, 1.0), (90.1, 0.8), (BAND_BACK, 0.6), (174.17, 0.8), (188.57, 0.8)];
         for (a, b) in [(CHORUS_1, 88.0), (CHORUS_2, 172.0), (FINAL, 246.0)] {
             let mut n = ((a - DOWNBEAT_0) / BEAT).round() as i32;
             while DOWNBEAT_0 + n as f32 * BEAT < b {
                 let at = DOWNBEAT_0 + n as f32 * BEAT;
-                if !(TIME_STOP.0 - 0.5..TIME_STOP.1 + 0.5).contains(&at) {
+                if !time_stopped(at, 0.5) {
                     ripples.push((at, if n.rem_euclid(3) == 0 { 1.0 } else { 0.3 }));
                 }
                 n += 1;
@@ -1117,7 +1118,7 @@ impl World {
         // Keep a little of the line's centre so the camera doesn't chase every syllable.
         // While time stops (届くはずのない…) it holds dead centre.
         let punch = matches!(spec.flow, Flow::Punch | Flow::PunchBack);
-        let target = if i == 10 { centre } else if punch { acc / wsum } else { (acc / wsum).lerp(centre, 0.25) };
+        let target = if i == 10 || i == 23 { centre } else if punch { acc / wsum } else { (acc / wsum).lerp(centre, 0.25) };
         // While a note is held the letter grows: stay on the whole line and give it room.
         let held = HOLDS.iter().filter(|h| h.0 == i).map(|h| ease_between(t, h.3, h.4) * (1.0 - ease_between(t, h.4, h.4 + 0.8))).fold(0.0_f32, f32::max);
         let held = if i >= 38 { 0.0 } else { held };
@@ -1278,9 +1279,9 @@ impl World {
                 let w = self.lines[j].spec.shot.whip;
                 let w = if w > 0.0 { w.max(0.7) * 1.5 } else { 0.0 };
                 let land = self.lines[j].start - 0.12;
-                if j == 11 {
+                if j == 11 || j == 24 {
                     // Out of the time stop: nothing moves until time does.
-                    let s0 = TIME_STOP.1 - 0.05;
+                    let s0 = TIME_STOPS[if j == 11 { 0 } else { 1 }].1 - 0.05;
                     return (w, s0, land + SETTLE - s0);
                 }
                 if w <= 0.0 {
@@ -1640,7 +1641,9 @@ impl World {
                 // The echoes spread back from the word after it lands.
                 node.position.z -= 0.9 * n as f32 * ease_out(since / 1.6);
             }
-            if !matches!(line.spec.flow, Flow::Travel | Flow::TravelBack) && ![6, 13].contains(&g.line) {
+            // The last だ of 抱えて向かうんだ stays: the camera plunges through it.
+            let last_da = g.line == 12 && g.word_start > 87.7;
+            if ![6, 13].contains(&g.line) && !last_da {
                 // Words dissolve as the camera reaches them, so it flies through, not into them.
                 let st = line.spec.station;
                 let ahead = (cam_now.pos - st.world(node.position)).dot(st.rot * Vec3::Z);
@@ -1667,17 +1670,8 @@ impl World {
                 node.rotation = Quat::from_rotation_z(ang + 1.2 * pull) * node.rotation;
                 opacity *= 1.0 - pull * pull * pull;
             }
-            // 抱えて向かうんだ: letters peel off past the camera once they've been sung.
-            let last_da = g.line == 12 && g.word_start > 87.7;
             if last_da {
                 node.scale *= 1.0 + 1.6 * clamp01((t - 87.85) / 2.25).powi(2);
-            }
-            if line.spec.flow == Flow::Travel && !last_da {
-                let (far, dur) = if g.line == 12 { (3.5, 0.4) } else { (1.3, 1.2) };
-                let past = expo_in((t - g.word_end + 0.05) / dur);
-                let side = if g.base.x >= 0.0 { 1.0 } else { -1.0 };
-                node.position += Vec3::new(side * far * past, 0.6 * past, 0.0);
-                opacity *= 1.0 - past;
             }
             // 向こうへと向かうんだ: out of reach. One by one the letters fall in on themselves and
             // stay where they were as points of light.
@@ -1752,8 +1746,16 @@ impl World {
                 let tail = 1.0 - k as f32 / 36.0;
                 let size = if k == 0 { 0.17 } else { 0.1 * tail.powf(1.5) };
                 let leave = (up * 2.6 + Vec3::new(2.4, 0.0, -1.5)) * split;
-                debris.push(Particle::new(c + orbit + leave, size, Rgb::hex(0x9fc2ff) * (3.0 * tail * lights_on * (1.0 - split))).opacity(tail * lights_on * (1.0 - split)));
-                debris.push(Particle::new(c - orbit, size, Rgb::hex(0xffb8bd) * (3.0 * tail * lights_on)).opacity(tail * lights_on));
+                let (blue, pink) = (lights_on * (1.0 - split), lights_on);
+                if k == 0 {
+                    // The heads burn: a white-hot core inside layered halos that breathe.
+                    let breathe = 1.0 + 0.12 * (t * 5.3).sin() + 0.08 * (t * 8.9 + 1.0).sin();
+                    glow(&mut debris, c + orbit + leave, 0.17 * breathe, Rgb::hex(0x9fc2ff), blue);
+                    glow(&mut debris, c - orbit, 0.17 * (2.0 - breathe), Rgb::hex(0xffb8bd), pink);
+                    continue;
+                }
+                debris.push(Particle::new(c + orbit + leave, size, Rgb::hex(0x9fc2ff) * (3.0 * tail * blue)).opacity(tail * blue));
+                debris.push(Particle::new(c - orbit, size, Rgb::hex(0xffb8bd) * (3.0 * tail * pink)).opacity(tail * pink));
             }
         }
         let kimi_on = window_f(t, 231.0, 235.3, 0.35);
@@ -1764,6 +1766,10 @@ impl World {
                 let far = (p - cam_now.pos).length();
                 let tail = 1.0 - k as f32 / 40.0;
                 let size = (if k == 0 { 0.03 } else { 0.018 * tail }) * (6.0 + far * 0.5);
+                if k == 0 {
+                    glow(&mut debris, p, size, Rgb::hex(0x9fc2ff), kimi_on);
+                    continue;
+                }
                 debris.push(Particle::new(p, size, Rgb::hex(0x9fc2ff) * (3.5 * tail * kimi_on)).opacity(tail * kimi_on));
             }
         }
@@ -1832,12 +1838,22 @@ impl World {
             tv: window_f(t, KURUSHIKU - 0.05, 75.3, 0.6) + window_f(t, 153.16, 157.9, 0.6),
             // 届くはずのない…: "The World". An inverted dome sweeps out and the world goes grey
             // and still; it sweeps back in when time restarts.
-            dome: if t < TIME_STOP.0 + 0.7 { 1.9 * expo_out((t - TIME_STOP.0) / 0.6) * if t >= TIME_STOP.0 { 1.0 } else { 0.0 } }
-                else if t > TIME_STOP.1 - 0.4 && t < TIME_STOP.1 + 0.05 { 1.9 * (1.0 - expo_in((t - TIME_STOP.1 + 0.4) / 0.42)) }
-                else { 0.0 },
-            stop: window_f(t, TIME_STOP.0 + 0.35, TIME_STOP.1 - 0.1, 0.25),
+            // The dome sweeps past the corners (2.04 half-heights away) so it fills the frame.
+            dome: TIME_STOPS
+                .iter()
+                .map(|&(a, b)| {
+                    if t >= a && t < a + 0.7 {
+                        2.4 * expo_out((t - a) / 0.6)
+                    } else if t > b - 0.4 && t < b + 0.05 {
+                        2.4 * (1.0 - expo_in((t - b + 0.4) / 0.42))
+                    } else {
+                        0.0
+                    }
+                })
+                .fold(0.0, f32::max),
+            stop: TIME_STOPS.iter().map(|&(a, b)| window_f(t, a + 0.35, b - 0.1, 0.25)).fold(0.0, f32::max),
             flash: (-((t - CHORUS_1).max(0.0)) / 0.28).exp() * if t >= CHORUS_1 - 0.02 { 1.0 } else { 0.0 } * 0.9
-                + 0.45 * (-((t - TIME_STOP.1).max(0.0)) / 0.25).exp() * if t >= TIME_STOP.1 { 1.0 } else { 0.0 }
+                + TIME_STOPS.iter().map(|&(_, b)| 0.45 * (-((t - b).max(0.0)) / 0.25).exp() * if t >= b { 1.0 } else { 0.0 }).sum::<f32>()
                 + 1.0 * (-((t - FINAL).max(0.0)) / 0.5).exp() * if t >= FINAL { 1.0 } else { 0.0 }
                 + 0.6 * (-((t - 90.1).max(0.0)) / 0.3).exp() * if t >= 90.1 { 1.0 } else { 0.0 },
             crt: 0.0,
@@ -1861,15 +1877,14 @@ impl World {
             snare: cue_pulse(SNARE, t, 0.14).min(1.2),
             staff: ease_between(t, 253.4, 254.3) * (1.0 - ease_between(t, 268.5, 271.8)),
             picks: {
-                // Each pick plucks one of the five lines; the line wanders like a melody would.
+                // Each pick lands where its measured note sits on the staff.
                 let n = GUITAR.iter().filter(|g| **g <= t).count();
                 let pick = |back: usize| {
                     if n <= back {
                         return Vec3::ZERO;
                     }
                     let k = n - 1 - back;
-                    let line = ((k as f32 * 0.9).sin() * 1.6 + (k as f32 * 2.3).sin() * 0.9 + 2.0).round().clamp(0.0, 4.0);
-                    Vec3::new(line, t - GUITAR[k], (-(t - GUITAR[k]) / 0.9).exp())
+                    Vec3::new(staff_step(GUITAR_NOTES[k]), t - GUITAR[k], (-(t - GUITAR[k]) / 0.9).exp())
                 };
                 [pick(0), pick(1)]
             },
