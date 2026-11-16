@@ -922,6 +922,14 @@ impl World {
             let row_gap = 1.38;
             let mut word_acc: HashMap<usize, (Vec3, f32)> = HashMap::new();
             let n_rows = rows.len() as f32;
+            // Horizontal rows: each gap is as tall as the two rows it separates, so an enlarged
+            // word never runs into the row above or below it.
+            let row_tall: Vec<f32> = rows.iter().map(|r| r.iter().map(|c| c.2).fold(0.0_f32, f32::max).max(0.6)).collect();
+            let mut row_off = vec![0.0_f32; rows.len()];
+            for r in 1..rows.len() {
+                row_off[r] = row_off[r - 1] - size * row_gap * 0.5 * (row_tall[r - 1] + row_tall[r]);
+            }
+            let row_mid = 0.5 * (row_off[0] + row_off[rows.len() - 1]);
             for (ri, row) in rows.iter().enumerate() {
                 let advances: Vec<f32> =
                     row.iter().map(|(_, ch, sc, _, _)| glyph_in(false, *ch).map_or(0.0, |g| g.1) * size * sc).collect();
@@ -933,7 +941,7 @@ impl World {
                 let (col_x, row_y) = match spec.flow {
                     Flow::Vertical => (-(ri as f32) * size * 1.7 + (n_rows - 1.0) * size * 0.85, 0.0),
                     Flow::Horizontal => {
-                        (0.0, -(ri as f32) * size * row_gap + (n_rows - 1.0) * size * row_gap * 0.5 - tallest * 0.35)
+                        (0.0, row_off[ri] - row_mid - tallest * 0.35)
                     }
                     Flow::Stack => (0.0, ri as f32 * size * 1.9 - tallest * 0.35),
                     Flow::Punch | Flow::PunchBack => (0.0, -tallest * 0.35),
