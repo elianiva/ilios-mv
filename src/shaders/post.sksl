@@ -1,0 +1,499 @@
+// Final composite: background mist, the 3D world, the lyrics, and the camera's motion.
+uniform float3 iResolution;
+uniform float iTime;
+uniform shader uWorld;
+uniform shader uText;
+uniform float2 uPan;   // screen motion of the centre in half a frame, px
+uniform float uZoom;   // forward motion / distance in half a frame
+uniform float uSpin;   // roll in half a frame, radians
+uniform float uHit;    // impact pulse 0..1.5
+uniform float uBlue;   // light from above (青い世界, the final chorus, the bridge's gem glow)
+uniform float3 uRayColor;
+uniform float uRed;    // 苦しく flash
+uniform float uLight;  // overall world light
+uniform float uInvert;   // 1 on an inverted frame
+uniform float uRedFrame; // 1 on a red noise frame
+uniform float uGlitch;   // block glitch amount
+uniform float uSpeed;    // manga speed lines
+uniform float uTwirl;    // wormhole: 0..1
+uniform float uBass;     // low band 0..1
+uniform float3 uCamR;    // camera basis, for the sky
+uniform float3 uCamU;
+uniform float3 uCamF;
+uniform float uTanFov;   // tan(vertical fov / 2)
+uniform float uTV;       // 苦しく寂しく: broken black-and-white TV, 0..1
+uniform float uCrt;      // CRT switching off: 0 → 1 squashes to a line
+uniform float uDome;     // time stop: radius of the inverted dome (0 = none)
+uniform float uStop;     // time stopped: grey, still, a little warped
+uniform float uFlash;    // white bloom out of the wormhole
+uniform float3 uSunDir;  // where the eclipsed sun hangs in the sky
+uniform float uSunR;     // its angular radius, radians
+uniform float uSunAmt;   // 0 = not in this sky
+uniform float uEclipse;  // 0 = totality, 1 = the sun stands clear of the moon
+uniform float3 uSunCol;  // colour of the corona and the light
+uniform float3 uNebA;    // nebula body colour
+uniform float3 uNebB;    // nebula filament colour
+uniform float uNeb;      // nebula amount
+uniform float3 uAtmo;    // the planet's limb glow (colour x amount)
+uniform float uDay;      // sunlight on the planet below, 0..1
+uniform float uStars;    // star brightness
+uniform float4 uComet;   // tail.xy -> head.xy, in uv
+uniform float uCometAmt;
+uniform float3 uGlowCol; // glow round the lyrics
+uniform float uGlowAmt;
+uniform float3 uStarDir; // one star that matters: the wish star, then where 君 went
+uniform float uStarAmt;
+uniform float3 uIrisDir; // bridge: the emerald iris; the voice ribbons are opposite it
+uniform float uIris;
+uniform float uVoice;
+uniform float4 uB0;      // the song's spectrum, 32 bands low to high
+uniform float4 uB1;
+uniform float4 uB2;
+uniform float4 uB3;
+uniform float4 uB4;
+uniform float4 uB5;
+uniform float4 uB6;
+uniform float4 uB7;
+uniform float uRipple;   // seconds since the last shock ring left the centre
+uniform float uRippleAmt;
+uniform float uShade;    // pool of shade behind the lyrics (choruses), 0..1
+
+float hash(float2 p) { return fract(sin(dot(p, float2(12.9898, 78.233))) * 43758.5453); }
+float noise(float2 p) {
+    float2 i = floor(p);
+    float2 f = fract(p);
+    float2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash(i), hash(i + float2(1, 0)), u.x), mix(hash(i + float2(0, 1)), hash(i + float2(1, 1)), u.x), u.y);
+}
+float fbm(float2 p) {
+    float v = 0.0;
+    float a = 0.5;
+    for (int i = 0; i < 5; i++) { v += a * noise(p); p *= 2.03; a *= 0.5; }
+    return v;
+}
+// 3D noise on the view direction: no seams and no poles, so the sky holds when we look up.
+float hash3(float3 p) {
+    p = fract(p * 0.3183099 + float3(0.71, 0.113, 0.419));
+    p *= 17.0;
+    return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
+}
+float noise3(float3 x) {
+    float3 i = floor(x);
+    float3 f = fract(x);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(
+        mix(mix(hash3(i), hash3(i + float3(1, 0, 0)), f.x), mix(hash3(i + float3(0, 1, 0)), hash3(i + float3(1, 1, 0)), f.x), f.y),
+        mix(mix(hash3(i + float3(0, 0, 1)), hash3(i + float3(1, 0, 1)), f.x), mix(hash3(i + float3(0, 1, 1)), hash3(i + float3(1, 1, 1)), f.x), f.y),
+        f.z);
+}
+float fbm3(float3 p) {
+    float v = 0.0;
+    float a = 0.5;
+    for (int i = 0; i < 5; i++) { v += a * noise3(p); p = p * 2.02 + float3(1.7, 9.2, 3.1); a *= 0.5; }
+    return v;
+}
+float fbm3lo(float3 p) {
+    float v = 0.0;
+    float a = 0.5;
+    for (int i = 0; i < 3; i++) { v += a * noise3(p); p = p * 2.02 + float3(1.7, 9.2, 3.1); a *= 0.5; }
+    return v;
+}
+
+// One layer of stars: a candidate per cell of a 3D grid cut by the view sphere, drawn as a
+// soft round point with a halo. `spike` adds the four-point flare of a lens on the bright ones.
+float3 starLayer(float3 v, float scale, float density, float rmin, float rvar, float spike, float pxPerRad) {
+    float3 g = v * scale;
+    float3 id = floor(g);
+    float h = hash3(id + 0.5);
+    if (h > density) { return float3(0.0); }
+    float3 c = id + 0.22 + 0.56 * float3(hash3(id + 1.3), hash3(id + 2.7), hash3(id + 4.1));
+    float3 cd = normalize(c);
+    float3 o = (cd - v) * pxPerRad;
+    float d = length(o);
+    float k = h / density;                       // 0..1, its own random number
+    float rad = rmin + rvar * pow(hash3(id + 7.7), 5.0);
+    float tw = 0.78 + 0.22 * sin(iTime * (0.7 + 2.3 * k) + k * 50.0);
+    float core = exp(-d * d / (rad * rad));
+    float halo = 0.22 / (1.0 + pow(d / (rad * 1.6), 2.0));
+    float sp = 0.0;
+    if (spike > 0.0) {
+        float ox = abs(dot(o, uCamR));
+        float oy = abs(dot(o, uCamU));
+        float len = rad * 9.0 * spike;
+        sp = exp(-ox / len) * exp(-oy * oy / (rad * rad * 0.16)) + exp(-oy / len) * exp(-ox * ox / (rad * rad * 0.16));
+        sp *= 0.55;
+    }
+    // Star colours: mostly cool white, some blue, a few warm.
+    float3 tint = mix(float3(0.80, 0.84, 1.0), float3(1.0, 0.86, 0.78), smoothstep(0.72, 0.95, k));
+    tint = mix(tint, float3(0.66, 0.74, 1.0), smoothstep(0.3, 0.05, k));
+    return tint * (core + halo * step(1.2, rad) + sp) * tw * (0.45 + 0.55 * hash3(id + 9.9));
+}
+
+float band1(int i) {
+    float4 v = uB0;
+    int g = i / 4;
+    if (g == 1) { v = uB1; } else if (g == 2) { v = uB2; } else if (g == 3) { v = uB3; } else if (g == 4) { v = uB4; }
+    else if (g == 5) { v = uB5; } else if (g == 6) { v = uB6; } else if (g >= 7) { v = uB7; }
+    int c = i - g * 4;
+    return c == 0 ? v.x : (c == 1 ? v.y : (c == 2 ? v.z : v.w));
+}
+// The spectrum at x in 0..1, smooth between bands.
+float bandAt(float x) {
+    float f = clamp(x, 0.0, 1.0) * 30.999;
+    int i = int(floor(f));
+    float t = f - float(i);
+    t = t * t * (3.0 - 2.0 * t);
+    return mix(band1(i), band1(i + 1), t);
+}
+// Ribbons of sound: thin bright strands that swell with the bass and carry the spectrum.
+float3 ribbons(float2 vp, float3 ca, float3 cb, float k) {
+    float3 acc = float3(0.0);
+    for (int n = 0; n < 6; n++) {
+        float fk = float(n);
+        float env = exp(-vp.x * vp.x * 0.5);
+        float sp = bandAt(abs(fract(vp.x * 0.35 + fk * 0.13) * 2.0 - 1.0)) - 0.4;
+        float y = (0.09 + 0.05 * fk) * sin(vp.x * (2.0 + 0.8 * fk) * k + iTime * (0.9 + 0.3 * fk) + fk * 1.7) * (0.55 + 0.9 * uBass)
+            + 0.03 * sin(vp.x * 9.0 - iTime * 1.8 + fk) + 0.07 * sp;
+        float d = abs(vp.y - y * env - (fk - 2.5) * 0.045);
+        acc += mix(ca, cb, fk / 5.0) * (0.004 / (d + 0.003) + 0.02 * exp(-d * 14.0)) * (0.35 + 0.65 * env);
+    }
+    return acc;
+}
+
+// Where the sample at shutter offset k (-0.5..0.5) comes from.
+float2 motion(float2 p, float k) {
+    float2 c = iResolution.xy * 0.5;
+    float2 d = p - c;
+    float a = uSpin * k;
+    float2 r = float2(d.x * cos(a) - d.y * sin(a), d.x * sin(a) + d.y * cos(a));
+    return c + r * (1.0 + uZoom * k) + uPan * k;
+}
+
+half4 main(float2 p0) {
+    float2 res = iResolution.xy;
+    // Block glitch: rows of the picture slide sideways, re-rolled 24 times a second.
+    float tick = floor(iTime * 24.0);
+    float row = floor(p0.y / (18.0 + 40.0 * hash(float2(tick, 3.1))));
+    float gsel = hash(float2(row, tick));
+    float shift = (gsel > 1.0 - 0.45 * uGlitch) ? (hash(float2(row, tick + 7.0)) - 0.5) * 220.0 * uGlitch : 0.0;
+    float2 p = p0 + float2(shift, 0.0);
+    // Old TV: rows wobble, a slow vertical roll, and the CRT switching off to a line.
+    if (uTV > 0.001 || uCrt > 0.001) {
+        float row = floor(p.y / 3.0);
+        p.x += (hash(float2(row, floor(iTime * 30.0))) - 0.5) * 7.0 * uTV;
+        p.x += sin(p.y * 0.02 + iTime * 9.0) * 3.0 * uTV;
+        float hold = step(0.93, hash(float2(floor(iTime * 6.0), 4.0))) * uTV;
+        p.y = mod(p.y + hold * 140.0, iResolution.y);
+        float squash = 1.0 - 0.985 * uCrt;
+        p.y = iResolution.y * 0.5 + (p.y - iResolution.y * 0.5) / squash;
+        p.x = iResolution.x * 0.5 + (p.x - iResolution.x * 0.5) / (1.0 - 0.6 * smoothstep(0.7, 1.0, uCrt));
+    }
+    // Time stop: the dome's edge refracts the picture as it passes.
+    if (uDome > 0.001) {
+        float2 cd = iResolution.xy * 0.5;
+        float2 dd2 = p - cd;
+        float rd = length(dd2 / float2(iResolution.y * 0.5));
+        float edge = rd - uDome;
+        p += normalize(dd2 + 0.0001) * sin(edge * 38.0) * exp(-edge * edge * 60.0) * 14.0;
+    }
+    if (uStop > 0.001) {
+        // Frozen time: slow rings ripple out through the still picture.
+        float2 cd = iResolution.xy * 0.5;
+        float2 dd2 = p - cd;
+        float rr2 = length(dd2) / iResolution.y;
+        float wave = sin(rr2 * 34.0 - iTime * 2.2) * exp(-rr2 * 1.2);
+        p += normalize(dd2 + 0.0001) * wave * 6.0 * uStop;
+        p = cd + (p - cd) * (1.0 - 0.015 * uStop * sin(rr2 * 9.0 - iTime * 0.8));
+    }
+    // Wormhole: wind the picture in toward the centre.
+    {
+        float2 cc = iResolution.xy * 0.5;
+        float2 dd = p - cc;
+        float rr = length(dd) / length(cc);
+        float a = uTwirl * uTwirl * 4.5 * pow(max(1.0 - rr, 0.0), 1.5) + uTwirl * 0.6;
+        dd = float2(dd.x * cos(a) - dd.y * sin(a), dd.x * sin(a) + dd.y * cos(a));
+        p = cc + dd * (1.0 - 0.35 * uTwirl * (1.0 - rr));
+    }
+    // 響き渡る: a ring of sound leaves the centre and bends the picture as it passes.
+    float rippleGlow = 0.0;
+    if (uRippleAmt > 0.001) {
+        float2 dr = p - res * 0.5;
+        float rr3 = length(dr) / res.y;
+        float e3 = rr3 - uRipple * 1.15;
+        p += normalize(dr + 0.0001) * sin(e3 * 46.0) * exp(-e3 * e3 * 70.0) * 24.0 * uRippleAmt;
+        rippleGlow = exp(-e3 * e3 * 260.0) * uRippleAmt;
+    }
+    float2 uv = p / res;
+    float2 c = res * 0.5;
+
+    // ------------------------------------------------------------------ the sky
+    // Everything here lives on the view direction, so it turns with the camera: a galaxy
+    // with warped clouds and dust lanes, three depths of stars, the dark planet below (the
+    // town with no morning), and the eclipsed sun (Ilios), which only comes out at the end.
+    float aspect = res.x / res.y;
+    float3 vdir = normalize(uCamF + (uv.x * 2.0 - 1.0) * aspect * uTanFov * uCamR + (1.0 - uv.y * 2.0) * uTanFov * uCamU);
+    float pxPerRad = res.y / (2.0 * uTanFov);
+    float camSpeed = length(uPan) + abs(uZoom) * 900.0 + abs(uSpin) * 900.0;
+
+    float3 N = normalize(float3(0.32, 0.88, 0.36));
+    float gal = dot(vdir, N);
+    float band = exp(-pow(gal * 3.0, 2.0));
+    float3 q = vdir * 2.3 + float3(4.0, 1.0, 7.0);
+    float3 warp = float3(fbm3lo(q + float3(0.0, iTime * 0.006, 0.0)), fbm3lo(q + 5.2), fbm3lo(q + 9.7)) - 0.5;
+    float n1 = fbm3(q + 2.4 * warp);
+    float n2 = fbm3(q * 2.6 + 3.2 * warp + 11.0);
+    float lanes = fbm3(q * 1.7 - 2.8 * warp + 23.0);
+    float f = n1;
+    float where = 0.38 + 0.9 * band;                        // thicker along the galaxy, never empty
+    float dens = smoothstep(0.30, 0.95, n1) * where;
+    float fil = pow(clamp(n2 * 1.35, 0.0, 1.0), 4.0);        // bright filaments
+    float dust = smoothstep(0.42, 0.70, lanes);              // dark lanes cut through
+    float3 bg = mix(float3(0.030, 0.022, 0.062), float3(0.052, 0.026, 0.044), clamp(uv.x * 0.5 + uv.y * 0.5, 0.0, 1.0));
+    float pulse = (0.62 + 0.38 * uLight) * (0.85 + 0.55 * uBass);
+    float3 cloud = uNebA * dens * (0.55 + 0.9 * n2) + uNebB * dens * fil * 1.2 + uNebB * band * pow(n2, 5.0) * 0.35;
+    bg += cloud * (1.0 - 0.72 * dust * band) * uNeb * pulse;
+    // The galaxy's core glow, low and warm against the violet.
+    bg += mix(uNebA, float3(0.62, 0.50, 0.66), 0.5) * band * band * (0.10 + 0.22 * n1) * uNeb * (1.0 - 0.6 * dust);
+
+    // Stars: dust-fine, middle, and a few bright ones with lens spikes. They fade while the
+    // camera whips so they never strobe.
+    float calm = 1.0 / (1.0 + camSpeed * 0.035);
+    float3 stars = starLayer(vdir, 150.0, 0.07 + 0.08 * band, 0.55, 0.4, 0.0, pxPerRad) * (0.45 + 0.4 * band);
+    stars += starLayer(vdir, 62.0, 0.05 + 0.04 * band, 0.8, 0.7, 0.0, pxPerRad) * 0.8;
+    stars += starLayer(vdir, 15.0, 0.07, 1.3, 1.2, 0.6, pxPerRad) * 1.0 * calm;
+    bg += stars * uStars * (1.0 - 0.55 * dens * dust) * (0.35 + 0.65 * calm);
+
+    // Bridge: the sky sings. Emerald strands hang like a curtain behind その目, amethyst ones
+    // run level behind その声.
+    if (uIris + uVoice > 0.001) {
+        float3 I = normalize(uIrisDir);
+        float ci = dot(vdir, I);
+        float3 io = vdir - I * ci;
+        float2 ip = float2(dot(io, uCamR), dot(io, uCamU)) / max(ci, 0.05);
+        float3 em = ribbons(float2(ip.y * 1.3, ip.x * 0.8), float3(0.10, 0.90, 0.58), float3(0.72, 1.0, 0.62), 0.7);
+        float3 am = ribbons(ip, float3(0.58, 0.40, 1.0), float3(1.0, 0.62, 0.88), 1.0);
+        bg += (em * uIris + am * uVoice) * 0.11 * step(0.0, ci);
+    }
+
+    // The planet below: night side, thin clouds, the town's few lights, a breath of air on
+    // the limb. When the sun finally comes out its light crosses the clouds.
+    float3 S = normalize(uSunDir);
+    {
+        float3 pc = normalize(float3(0.10, -1.0, 0.05));
+        float R = 1.330;                                     // angular radius: the limb sits 14 degrees under the horizon
+        float D = 1.0 / sin(R);
+        float mu = dot(vdir, pc);
+        float ang = acos(clamp(mu, -1.0, 1.0));
+        float limb = ang - R;                                // > 0 outside
+        float3 V = -pc * D;
+        float bq = dot(V, vdir);
+        float disc = bq * bq - (D * D - 1.0);
+        float edge = smoothstep(0.0025, -0.0025, limb);
+        float inner = exp(-max(-limb, 0.0) / 0.05);          // the air thins quickly inside the limb
+        float3 air = uAtmo * (exp(-max(limb, 0.0) / 0.020) * 0.85 + exp(-max(limb, 0.0) / 0.085) * 0.22) * inner;
+        float3 toSun = normalize(S - pc * dot(S, pc) + 0.0001);
+        float3 rimDir = normalize(vdir - pc * mu + 0.0001);
+        float dawn = pow(max(dot(rimDir, toSun), 0.0), 3.0);
+        air += uSunCol * uDay * (exp(-max(limb, 0.0) / 0.03) * 1.2 + exp(-max(limb, 0.0) / 0.14) * 0.35) * (0.35 + 0.9 * dawn) * inner;
+        if (disc > 0.0) {
+            float3 P = V + (-bq - sqrt(disc)) * vdir;        // point on the sphere = its normal
+            float graze = 1.0 - clamp(dot(P, -vdir), 0.0, 1.0);
+            float3 pw = P * 3.2 + float3(0.0, 0.0, iTime * 0.004);
+            float cl = fbm3(pw + 1.6 * float3(fbm3lo(pw * 1.3 + 3.0), fbm3lo(pw * 1.3 + 7.0), 0.0));
+            // Close detail for when we look straight down from low orbit; it fades toward the
+            // limb, where it would only shimmer.
+            float near = pow(1.0 - graze, 2.0);
+            float3 ph = P * 85.0 + float3(0.0, 0.0, iTime * 0.02);
+            float hi = fbm3(ph + 1.4 * float3(fbm3lo(ph * 1.2 + 3.0), fbm3lo(ph * 1.2 + 7.0), 0.0));
+            cl = mix(cl, 0.5 * cl + 0.62 * hi, 0.75 * near);
+            float clouds = smoothstep(0.40, 0.74, cl);
+            float3 ground = float3(0.016, 0.013, 0.034) + float3(0.10, 0.085, 0.21) * clouds * (0.35 + 0.65 * cl) * (0.4 + 0.6 * uLight);
+            // The town: lights gathered where the land is, a fine grid of windows.
+            float land = smoothstep(0.50, 0.66, fbm3(P * 38.0 + 31.0)) * smoothstep(0.42, 0.75, noise3(P * 260.0 + 5.0)) * near;
+            float3 lg = P * 1500.0;
+            float3 lid = floor(lg);
+            float lh = hash3(lid);
+            float ld = length(fract(lg) - 0.3 - 0.4 * float3(hash3(lid + 1.1), hash3(lid + 2.3), hash3(lid + 3.7)));
+            float lights = step(0.72, lh) * exp(-ld * ld * 22.0) * land * (1.0 - 0.75 * clouds);
+            lights *= 0.7 + 0.3 * sin(iTime * (1.0 + 4.0 * lh) + lh * 30.0);
+            ground += float3(1.0, 0.66, 0.36) * lights * 1.1 * (1.0 - uDay) * (0.4 + 0.6 * uLight);
+            // Sunlight: cold on the cloud tops.
+            float lit = clamp(dot(P, S) * 1.3 + 0.15, 0.0, 1.0);
+            ground += uSunCol * uDay * lit * (0.10 + 0.55 * clouds + 0.25 * cl);
+            ground += (uAtmo * 1.1 + uSunCol * uDay * 0.6) * pow(graze, 3.5);
+            bg = mix(bg, ground, edge);
+        }
+        // The song on the horizon: the air stands higher where the spectrum is loud.
+        float az = atan(rimDir.z, rimDir.x);
+        float eq = bandAt(abs(fract(az * 0.4775) * 2.0 - 1.0));
+        air += (uAtmo * 1.6 + float3(0.10, 0.08, 0.22)) * exp(-max(limb, 0.0) / (0.008 + 0.042 * eq)) * eq * 0.5 * inner;
+        bg += air * (1.0 - edge * 0.65);
+        // Dawn: the sun never clears the horizon. A hot point on the limb, a long flare.
+        if (uDay > 0.001) {
+            float cs2 = dot(vdir, S);
+            float3 so2 = vdir - S * cs2;
+            float sx = dot(so2, uCamR);
+            float sy = dot(so2, uCamU);
+            float sd2 = sx * sx + sy * sy;
+            float glare = 0.5 / (1.0 + sd2 * 40.0) + 2.2 * exp(-sd2 * 1800.0) * (1.0 - edge) + 0.6 * exp(-abs(sy) * 55.0) * exp(-abs(sx) * 2.2);
+            bg += mix(uSunCol, float3(1.0), 0.35) * glare * uDay * step(0.0, cs2);
+        }
+    }
+
+    float2 sunUv = float2(0.5, -0.35);
+    float sunSeen = 0.0;
+    float moonMask = 0.0 * uSunAmt * uEclipse * uSunR;
+    {
+        float3 sc = float3(dot(S, uCamR), dot(S, uCamU), dot(S, uCamF));
+        if (sc.z > 0.05 && uDay > 0.001) {
+            sunUv = float2(0.5 + 0.5 * sc.x / (sc.z * aspect * uTanFov), 0.5 - 0.5 * sc.y / (sc.z * uTanFov));
+            sunSeen = uDay;
+        }
+    }
+    // The one star: soft core, wide halo, long thin spikes.
+    if (uStarAmt > 0.001) {
+        float3 Sd = normalize(uStarDir);
+        float3 o4 = (vdir - Sd) * pxPerRad * step(0.0, dot(vdir, Sd));
+        float d4 = length(o4) + 4000.0 * (1.0 - step(0.0, dot(vdir, Sd)));
+        float r4 = 2.0 + 9.0 * uStarAmt;
+        float ox4 = abs(dot(o4, uCamR));
+        float oy4 = abs(dot(o4, uCamU));
+        float len4 = r4 * (4.0 + 5.0 * min(uStarAmt, 1.5));
+        float sp4 = exp(-ox4 / len4) * exp(-oy4 * oy4 / (r4 * r4 * 0.05)) + exp(-oy4 / len4) * exp(-ox4 * ox4 / (r4 * r4 * 0.05));
+        float st4 = exp(-d4 * d4 / (r4 * r4)) * 1.6 + 0.5 / (1.0 + pow(d4 / (r4 * 2.2), 2.0)) + sp4 * 0.45;
+        bg += float3(0.86, 0.90, 1.0) * st4 * min(uStarAmt, 1.0) + float3(0.5, 0.6, 1.0) * uStarAmt * uStarAmt * 0.35 / (1.0 + pow(d4 / 260.0, 2.0));
+    }
+
+    // Soft rays: from the sun when it is in this sky, else fanning down from above the frame.
+    float2 src = mix(float2(0.5, -0.35), sunUv, sunSeen);
+    float2 rel = (uv - src) * float2(aspect / 1.78, 1.0);
+    float ang = atan(rel.x, rel.y);
+    float rays = 0.55 + 0.45 * noise(float2(ang * 9.0, iTime * 0.25)) * noise(float2(ang * 23.0, 3.0 - iTime * 0.15));
+    float fall = smoothstep(1.35, 0.25 - 0.2 * sunSeen, length(rel));
+    bg += uBlue * uRayColor * fall * rays * (0.65 + 0.5 * f) * (1.0 - 0.94 * moonMask);
+
+    // A comet: one bright head and a long tail that widens behind it.
+    if (uCometAmt > 0.001) {
+        float2 ca = uComet.xy * res;
+        float2 cb = uComet.zw * res;
+        float2 cab = cb - ca;
+        float cl2 = max(length(cab), 1.0);
+        float2 cdir = cab / cl2;
+        float2 cp = p - ca;
+        float along = dot(cp, cdir) / cl2;
+        float across = dot(cp, float2(-cdir.y, cdir.x));
+        float wd = 1.6 + 26.0 * (1.0 - clamp(along, 0.0, 1.0));
+        float tail = pow(clamp(along, 0.0, 1.0), 2.6) * step(along, 1.0) * exp(-across * across / (wd * wd)) * (3.2 / wd);
+        float hd = length(p - cb);
+        float head = exp(-hd * hd / 10.0) * 1.6 + 0.5 / (1.0 + hd * hd / 40.0);
+        float dustn = 0.75 + 0.25 * noise(float2(along * 60.0 - iTime * 3.0, across * 0.3));
+        bg += (float3(0.72, 0.80, 1.0) * tail * dustn + float3(0.95, 0.96, 1.0) * head) * uCometAmt;
+    }
+
+    float2 dir = (p - c) / length(c);
+    float speed = camSpeed;
+    float ab = 1.0 + 5.0 * uHit + speed * 0.02 + 14.0 * uTwirl;
+
+    half4 w = half4(0);
+    half4 tx = half4(0);
+    for (int i = 0; i < 16; i++) {
+        float k = (float(i) + 0.5) / 16.0 - 0.5;
+        float2 q = motion(p, k);
+        half4 g = uWorld.eval(q);
+        w += half4(uWorld.eval(q + dir * ab).r, g.g, uWorld.eval(q - dir * ab).b, g.a);
+        half4 tg = uText.eval(q);
+        tx += half4(uText.eval(q + dir * ab * 0.6).r, tg.g, uText.eval(q - dir * ab * 0.6).b, tg.a);
+    }
+    w /= 16.0;
+    tx /= 16.0;
+
+    float3 col = bg * (1.0 - w.a) + w.rgb;
+
+    // Soft glow behind the lyrics.
+    float glow = 0.0;
+    float wide = 0.0;
+    for (int i = 0; i < 8; i++) {
+        float a = float(i) * 0.785398 + hash(p0 * 0.37) * 0.785398;
+        float2 o = float2(cos(a), sin(a)) * (0.75 + 0.5 * hash(p0 * 0.53 + float(i)));
+        glow += uText.eval(p + o * 14.0).a + uText.eval(p + o * 34.0).a * 0.6;
+        wide += uText.eval(p + o * 72.0).a + uText.eval(p + o * 124.0).a * 0.7;
+    }
+    glow /= 12.8;
+    // Against the open sun the lyrics get a pool of shade instead, so they stay readable.
+    // In the choruses the same pool, wider, quiets the nebula and the circle's small runes
+    // right behind the words.
+    wide /= 13.6;
+    col *= 1.0 - clamp(glow * 1.8 + wide * 1.5, 0.0, 1.0) * max(0.72 * uSunAmt * uEclipse, uShade);
+    col += uGlowCol * (glow * 0.5 + wide * 0.55) * uGlowAmt;
+    col += float3(0.62, 0.64, 0.95) * rippleGlow * 0.22;
+    col = col * (1.0 - tx.a) + tx.rgb;
+
+    // Wormhole: streaks rushing in toward the singularity, and a dark lensing ring.
+    if (uTwirl > 0.001) {
+        float2 dw = p - c;
+        float rw = length(dw) / length(c);
+        float aw = atan(dw.y, dw.x);
+        float streak = noise(float2(aw * 70.0, rw * 3.0 + iTime * 6.0 * (1.0 + uTwirl * 4.0)));
+        float lines2 = smoothstep(0.62, 0.95, streak) * smoothstep(0.05, 0.5, rw);
+        col += float3(0.55, 0.6, 1.0) * lines2 * uTwirl * uTwirl * 0.9;
+        col *= 1.0 - 0.7 * uTwirl * smoothstep(0.12, 0.0, abs(rw - 0.22 * (1.0 - uTwirl)));
+    }
+    // Speed lines from the centre (苦しく).
+    float2 dc = p - c;
+    float sang = atan(dc.y, dc.x);
+    float sl = noise(float2(sang * 60.0, floor(iTime * 24.0) * 3.7));
+    float lines = smoothstep(0.72, 0.9, sl) * smoothstep(0.28, 0.9, length(dc) / length(c));
+    col = mix(col, float3(0.93, 0.88, 0.92), lines * uSpeed * 0.85);
+
+    // Impacts and colour moments.
+    col += float3(0.5, 0.46, 0.66) * uHit * 0.06;
+    col = mix(col, col * float3(1.35, 0.55, 0.6) + float3(0.22, 0.0, 0.03), uRed * 0.55);
+    col += uBlue * uRayColor * 0.18 * (1.0 - uv.y) * (1.0 - 0.94 * moonMask);
+
+    // Vignette and grain; the wormhole closes the frame to a bright centre.
+    float v = length((uv - 0.5) * float2(1.15, 1.0));
+    col *= 1.0 - 0.6 * smoothstep(0.35, 0.95, v);
+    col *= 1.0 - uTwirl * smoothstep(0.05, 0.6, v);
+    col += float3(0.55, 0.5, 0.85) * uTwirl * uTwirl * smoothstep(0.25, 0.0, v) * 0.6;
+    col += (hash(p * 0.71 + fract(iTime) * 113.0) - 0.5) * 0.04;
+    col = clamp(col, 0.0, 1.0);
+    // Time stop: grey-green, high contrast, the colour drained; the dome inverts inside it.
+    if (uStop > 0.001) {
+        float ls = dot(col, float3(0.299, 0.587, 0.114));
+        float3 still = float3(ls) * float3(0.86, 0.95, 0.82);
+        still = (still - 0.5) * 1.25 + 0.5;
+        col = mix(col, clamp(still, 0.0, 1.0), uStop * 0.9);
+    }
+    if (uDome > 0.001) {
+        float rd = length((p0 - res * 0.5) / float2(res.y * 0.5));
+        float inside = smoothstep(uDome + 0.01, uDome - 0.01, rd);
+        float3 inv = float3(1.0) - col;
+        col = mix(col, inv * float3(0.9, 0.95, 1.0), inside);
+        col += float3(0.8, 0.85, 1.0) * exp(-pow((rd - uDome) * 30.0, 2.0)) * 0.6;
+    }
+    col = mix(col, float3(0.96, 0.94, 1.0), clamp(uFlash, 0.0, 1.0) * 0.85);
+    if (uTV > 0.001) {
+        float l = dot(col, float3(0.299, 0.587, 0.114));
+        float redness = smoothstep(0.08, 0.3, col.r - max(col.g, col.b));
+        float3 bw = float3(l) * float3(1.0, 0.97, 0.92);
+        col = mix(col, mix(bw, col, redness * 0.9), uTV);
+        col *= 1.0 - 0.28 * uTV * (0.5 + 0.5 * sin(p0.y * 2.1));
+        col += (hash(p0 * 0.5 + floor(iTime * 30.0)) - 0.5) * 0.16 * uTV;
+        float roll = smoothstep(0.0, 0.08, fract(uv.y - iTime * 0.3)) * smoothstep(0.2, 0.08, fract(uv.y - iTime * 0.3));
+        col += 0.06 * roll * uTV;
+        col *= 1.0 - 0.45 * uTV * smoothstep(0.35, 0.85, length((uv - 0.5) * float2(1.2, 1.0)));
+    }
+    if (uCrt > 0.001) {
+        float yy = abs(p0.y - res.y * 0.5) / res.y;
+        col *= step(yy, 0.5 * (1.0 - 0.985 * uCrt) + 0.002);
+        col += float3(0.9, 0.9, 1.0) * smoothstep(0.004, 0.0, yy) * smoothstep(0.85, 1.0, uCrt) * (1.0 - smoothstep(0.97, 1.0, uCrt) * 0.0);
+        col *= 1.0 - smoothstep(0.985, 1.0, uCrt);
+    }
+    // Red noise frame and inverted frame (the YOASOBI-style burst).
+    float rn = hash(floor(p0 / float2(6.0, 2.0)) + tick);
+    float3 red = float3(0.85, 0.12, 0.16) * (0.55 + 0.45 * rn) + float3(0.1, 0.05, 0.3) * step(0.93, rn);
+    col = mix(col, red, uRedFrame * 0.0);
+    float luma = dot(col, float3(0.299, 0.587, 0.114));
+    col = mix(col, float3(0.95, 0.92, 0.93) * (1.0 - 0.92 * luma), uInvert);
+    return half4(col, 1.0);
+}
