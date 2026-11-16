@@ -503,8 +503,6 @@ pub struct World {
     graphics: Graphics,
     glyphs: Vec<GlyphInst>,
     lines: Vec<LineInst>,
-    /// Shock rings: (time, strength).
-    ripples: Vec<(f32, f32)>,
     /// メロディア's staff: (group, rest position, from, to).
     staffs: Vec<(NodeId, Vec3, f32, f32, f32, Vec<(NodeId, f32, f32)>)>,
     dust: Vec<(Vec3, f32, f32, f32)>,
@@ -554,13 +552,13 @@ pub struct Frame3d {
     pub shade: f32,
     pub glow_col: Vec3,
     pub glow_amt: f32,
-    pub ripple: f32,
-    pub ripple_amt: f32,
     pub star_dir: Vec3,
     pub star_amt: f32,
     pub iris: f32,
     pub voice: f32,
     pub beat: f32,
+    /// The downbeat toll: (seconds since, amount).
+    pub toll: (f32, f32),
     pub swell: f32,
     pub snare: f32,
     /// A dropped note: (screen x, seconds since, amount).
@@ -671,6 +669,17 @@ fn beat_pulse(t: f32) -> f32 {
     let n = (t - DOWNBEAT_0) / BEAT;
     let k = if (n.floor() as i32).rem_euclid(3) == 0 { 1.0 } else { 0.4 };
     k * (-(n.fract() * BEAT) / 0.16).exp()
+}
+
+/// The chorus tolls on every downbeat, like struck iron (鉄が奏でるメロディア): seconds since
+/// the last one, and how loud it still rings. Silent while time is stopped.
+fn toll(t: f32) -> (f32, f32) {
+    let in_chorus = |x: f32| ((x >= CHORUS_1 && x < 88.0) || (x >= CHORUS_2 && x < 172.0) || (x >= FINAL && x < 246.0)) && !time_stopped(x, 0.5);
+    let at = downbeat(((t - DOWNBEAT_0) / BAR).floor() as i32);
+    if !in_chorus(at) || time_stopped(t, 0.0) {
+        return (9.0, 0.0);
+    }
+    (t - at, (-(t - at) / 0.9).exp())
 }
 
 /// 0 → 1 as the camera falls into 笑顔で言う and through the tunnel (accelerating).
@@ -1014,19 +1023,6 @@ impl World {
             line_insts.push(LineInst { arrivals: Vec::new(), group, spec: *spec, in_t, out_t, start: first, end: line.end(), words });
         }
 
-        // Shock rings: on the beat through the choruses (strong on the downbeat), and on a few
-        // single hits.
-        let mut ripples: Vec<(f32, f32)> = vec![(TIME_STOPS[0].1, 1.0), (TIME_STOPS[1].1, 1.0), (90.1, 0.8), (BAND_BACK, 0.6), (174.17, 0.8), (188.57, 0.8)];
-        for (a, b) in [(CHORUS_1, 88.0), (CHORUS_2, 172.0), (FINAL, 246.0)] {
-            let mut n = ((a - DOWNBEAT_0) / BEAT).round() as i32;
-            while DOWNBEAT_0 + n as f32 * BEAT < b {
-                let at = DOWNBEAT_0 + n as f32 * BEAT;
-                if !time_stopped(at, 0.5) {
-                    ripples.push((at, if n.rem_euclid(3) == 0 { 1.0 } else { 0.3 }));
-                }
-                n += 1;
-            }
-        }
         // メロディア: a staff runs behind the word and the notes slide along it, like reading the score.
         let mut staffs = Vec::new();
         for (li, t0, t1) in [(8usize, 68.5_f32, 70.2_f32), (21, 151.3, 153.0)] {
@@ -1056,7 +1052,6 @@ impl World {
             }
             staffs.push((g, base, t0, t1, size, parts));
         }
-        ripples.sort_by(|a, b| a.0.total_cmp(&b.0));
         let hash = |i: u32, s: u32| -> f32 {
             let mut x = i.wrapping_mul(0x9E3779B1) ^ s.wrapping_mul(0x85EBCA77);
             x ^= x >> 15;
@@ -1085,7 +1080,6 @@ impl World {
             graphics,
             glyphs,
             lines: line_insts,
-            ripples,
             staffs,
             dust,
         }
@@ -1427,13 +1421,6 @@ impl World {
         let glow_k = clamp01(gw / 2.0);
         let glow_col = Vec3::new(0.46, 0.42, 0.66).lerp(gacc / gw.max(1e-3), glow_k);
         let glow_amt = 0.55 + 0.75 * glow_k + 0.35 * cue_pulse(CHORD, t, 0.3);
-
-        let (ripple_since, ripple_amt) = self
-            .ripples
-            .iter()
-            .rev()
-            .find(|(at, _)| *at <= t)
-            .map_or((9.0, 0.0), |(at, k)| (t - at, k * (-(t - at) / 0.7).exp()));
 
         let clock = world_clock(t);
         // Each word inscribed onto the ring in the chorus sends a glow through the circle.
@@ -1867,12 +1854,12 @@ impl World {
             shade: 0.0,
             glow_col,
             glow_amt,
-            ripple: ripple_since,
             star_dir,
             star_amt,
             iris,
             voice,
             beat: beat_pulse(t),
+            toll: toll(t),
             swell: cue_swell(WHEEZE, t, 0.12, 0.75).min(1.6),
             snare: cue_pulse(SNARE, t, 0.14).min(1.2),
             staff: ease_between(t, 253.4, 254.3) * (1.0 - ease_between(t, 268.5, 271.8)),
@@ -1897,7 +1884,6 @@ impl World {
                 [key(0), key(1)]
             },
             echo: VOCAL_ECHO.iter().rev().find(|c| **c <= t).map_or((9.0, 0.0), |c| (t - c, (-(t - c) / 0.55).exp())),
-            ripple_amt,
         }
     }
 }

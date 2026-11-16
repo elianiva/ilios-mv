@@ -66,8 +66,8 @@ uniform float uSwell;    // the big synth swell: the sky and the air breathe in
 uniform float uEcho;     // seconds since a vocal echo
 uniform float uEchoAmt;
 uniform float uBeat;     // beat pulse in the choruses
-uniform float uRipple;   // seconds since the last shock ring left the centre
-uniform float uRippleAmt;
+uniform float uToll;     // chorus downbeat, struck like iron: seconds since
+uniform float uTollAmt;
 uniform float uShade;    // pool of shade behind the lyrics (choruses), 0..1
 
 float hash(float2 p) { return fract(sin(dot(p, float2(12.9898, 78.233))) * 43758.5453); }
@@ -302,15 +302,6 @@ half4 main(float2 p0) {
         sc *= 1.0 - k * 0.22 * rr * (hash(p0 * 0.37 + fract(iTime) * 61.0) - 0.5);
         p = cc + dd * sc;
     }
-    // 響き渡る: a ring of sound leaves the centre and bends the picture as it passes.
-    float rippleGlow = 0.0;
-    if (uRippleAmt > 0.001) {
-        float2 dr = p - res * 0.5;
-        float rr3 = length(dr) / res.y;
-        float e3 = rr3 - uRipple * 1.15;
-        p += normalize(dr + 0.0001) * sin(e3 * 46.0) * exp(-e3 * e3 * 70.0) * 24.0 * uRippleAmt;
-        rippleGlow = exp(-e3 * e3 * 260.0) * uRippleAmt;
-    }
     float2 uv = p / res;
     float2 c = res * 0.5;
 
@@ -382,6 +373,8 @@ half4 main(float2 p0) {
         // A dropped note lands on the horizon: light runs both ways along the limb from where
         // it fell, and the town's windows wake as it passes over them.
         float dropWave = exp(-pow((abs(uv.x - uDrop.x) - uDrop.y * 0.34) * 7.0, 2.0)) * uDrop.z;
+        // The chorus downbeat rings the horizon too: light runs out along the limb from under the words.
+        dropWave += 0.8 * exp(-pow((abs(uv.x - 0.5) - uToll * 0.30) * 6.0, 2.0)) * uTollAmt;
         float3 air = uAtmo * (exp(-max(limb, 0.0) / 0.020) * 0.85 + exp(-max(limb, 0.0) / 0.085) * 0.22) * inner;
         float3 toSun = normalize(S - pc * dot(S, pc) + 0.0001);
         float3 rimDir = normalize(vdir - pc * mu + 0.0001);
@@ -525,6 +518,14 @@ half4 main(float2 p0) {
     col *= 1.0 - clamp(glow * 1.8 + wide * 1.5, 0.0, 1.0) * max(0.72 * uSunAmt * uEclipse, uShade);
     col += uGlowCol * (glow * 0.5 + wide * 0.55) * uGlowAmt;
     // A vocal echo: the words ring outward in fading copies.
+    // The downbeat strikes the words and they ring: faint copies of the lettering swell out of
+    // it and thin away, so the resonance has the shape of the lyric itself.
+    if (uTollAmt > 0.001) {
+        for (int j = 1; j <= 3; j++) {
+            float ts = 1.0 + (0.012 + uToll * 0.085) * float(j);
+            col += mix(uGlowCol, float3(1.0), 0.35) * uText.eval(c + (p - c) / ts).a * uTollAmt * 0.2 / float(j);
+        }
+    }
     if (uEchoAmt > 0.001) {
         for (int j = 1; j <= 3; j++) {
             float es = 1.0 + (0.04 + uEcho * 0.2) * float(j);
@@ -533,7 +534,6 @@ half4 main(float2 p0) {
     }
     // The lens again: bright letters smear sideways a little, like through anamorphic glass.
     col += float3(0.30, 0.42, 1.0) * flare / 8.0 * 0.20 * uGlowAmt;
-    col += float3(0.62, 0.64, 0.95) * rippleGlow * 0.22;
     col = col * (1.0 - tx.a) + tx.rgb;
 
     // Wormhole: streaks rushing in toward the singularity, and a dark lensing ring.
