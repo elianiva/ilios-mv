@@ -56,7 +56,7 @@ uniform float4 uB6;
 uniform float4 uB7;
 uniform float uBars;     // letterbox, fraction of the height top and bottom
 uniform float uStaff;    // ending: five lines of light across the frame, 0..1
-uniform float3 uPickA;   // the last guitar pick: staff step above E4, seconds since, amount
+uniform float3 uPickA;   // the last guitar pick: string 0..4 from the bottom, seconds since, amount
 uniform float3 uPickB;   // the one before it
 uniform float uSnare;    // snare: the stars and the bridge's strands jump
 uniform float3 uDrop;    // a note dropped on the horizon: x (0..1), seconds since, amount
@@ -174,23 +174,30 @@ float3 ribbons(float2 vp, float3 ca, float3 cb, float k) {
 
 // Ending: a staff of five strings of light, a treble staff (E4 G4 B4 D5 F5 from the bottom).
 // Screen y grows downward, so string 0 (E4) is the lowest on screen.
-// Each guitar pick is a note at its real height: the strings nearest it shiver, and a note of
-// light runs out both ways from where it was struck. Notes arrive folded onto the staff.
-const float STEP = 0.031;  // one diatonic step; the strings are two steps apart
+// Each guitar pick is a note on a string (uPick.x is the string, 0..4): that string shivers,
+// and a note of light runs out both ways along it from where it was struck.
+const float STEP = 0.031;  // half the gap between two strings
 
-float staffWave(float x, float line) {
-    return 0.010 * sin(x * 1.7 + iTime * 0.6 + line * 1.3);
+float pickOn(float3 k, float line) {
+    return exp(-pow(k.x - line, 2.0) * 3.0) * k.z;
+}
+
+// Height of string `line` at x, with its slow wave and the shiver of the last two picks. The
+// notes ride on this, so a note is always exactly on its string.
+float stringY(float x, float line) {
+    float shiver = pickOn(uPickA, line) * sin(uPickA.y * 46.0) + pickOn(uPickB, line) * sin(uPickB.y * 46.0);
+    return (2.0 - line) * 2.0 * STEP + 0.010 * sin(x * 1.7 + iTime * 0.6 + line * 1.3)
+        + 0.022 * shiver * cos(x * 1.9) * exp(-x * x * 0.55);
 }
 
 float3 staffNote(float2 vp, float3 k) {
     if (k.z < 0.001) { return float3(0.0); }
-    float y = (4.0 - k.x) * STEP + staffWave(vp.x, k.x * 0.5);
-    float d = abs(vp.y - y);
+    float d = abs(vp.y - stringY(vp.x, k.x));
     float run = abs(vp.x + 0.25) - k.y * 1.1;
     float head = exp(-pow(run * 26.0, 2.0));
-    float3 tint = mix(float3(1.0, 0.74, 0.78), float3(0.62, 0.74, 1.0), clamp((k.x + 5.0) / 18.0, 0.0, 1.0));
+    float3 tint = mix(float3(1.0, 0.74, 0.78), float3(0.62, 0.74, 1.0), k.x / 4.0);
     float3 acc = mix(tint, float3(1.0), 0.5) * k.z * head * (exp(-d * d * 9000.0) * 1.3 + exp(-d * d * 500.0) * 0.3);
-    // A faint trace of the note's own height behind the head.
+    // A faint trace of the note behind the head.
     acc += tint * k.z * 0.25 * exp(-d * d * 40000.0) * step(run, 0.0) * exp(2.0 * max(run, -0.6));
     return acc;
 }
@@ -200,13 +207,10 @@ float3 staff(float2 vp) {
     float env = exp(-vp.x * vp.x * 0.55);
     for (int n = 0; n < 5; n++) {
         float fk = float(n);
-        float onA = exp(-pow(uPickA.x * 0.5 - fk, 2.0) * 3.0) * uPickA.z;
-        float onB = exp(-pow(uPickB.x * 0.5 - fk, 2.0) * 3.0) * uPickB.z;
-        float shiver = onA * sin(uPickA.y * 46.0) + onB * sin(uPickB.y * 46.0);
-        float y = (2.0 - fk) * 2.0 * STEP + staffWave(vp.x, fk) + 0.022 * shiver * cos(vp.x * 1.9) * env;
-        float d = abs(vp.y - y);
+        float on = pickOn(uPickA, fk) + pickOn(uPickB, fk);
+        float d = abs(vp.y - stringY(vp.x, fk));
         float3 tint = mix(float3(1.0, 0.74, 0.78), float3(0.62, 0.74, 1.0), fk / 4.0);
-        acc += tint * (0.0016 / (d + 0.0022)) * (0.22 + 0.9 * (onA + onB)) * (0.25 + 0.75 * env);
+        acc += tint * (0.0016 / (d + 0.0022)) * (0.22 + 0.9 * on) * (0.25 + 0.75 * env);
     }
     return acc + staffNote(vp, uPickA) + staffNote(vp, uPickB);
 }

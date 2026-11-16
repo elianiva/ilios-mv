@@ -1260,10 +1260,34 @@ impl World {
         pose
     }
 
-    /// 君's light in the last chorus: it leaves toward the place the last star will be.
+    /// 君's light in the last chorus. It rises out of 君 as the word is sung, hops along the line
+    /// to each word in time with the voice, like the ball over a sing-along lyric, and from the
+    /// last word it leaves toward the place the last star will be.
     fn kimi_light(&self, t: f32) -> Vec3 {
-        let st = self.lines[37].spec.station;
-        st.world(Vec3::new(1.6, 0.7, -0.6)) + KIMI_DIR.normalize() * 600.0 * ease_in((t - 231.2) / 4.6)
+        let line = &self.lines[37];
+        let (st, size) = (line.spec.station, line.spec.size);
+        // (arrival, resting place): inside 君 first, then just above each later word.
+        let stops: Vec<(f32, Vec3)> = line
+            .words
+            .iter()
+            .enumerate()
+            .map(|(k, (mid, c))| (mid - 0.22, *c + Vec3::new(0.0, if k == 0 { 0.0 } else { 0.62 * size }, 0.4)))
+            .collect();
+        let Some(&(last_at, last)) = stops.last() else { return st.world(Vec3::ZERO) };
+        let mut p = stops[0].1;
+        for pair in stops.windows(2) {
+            let ((_, from), (at, to)) = (pair[0], pair[1]);
+            let hop = (at - pair[0].0).clamp(0.05, 0.42);
+            let u = clamp01((t - (at - hop)) / hop);
+            if u > 0.0 {
+                p = from.lerp(to, smooth5(u)) + Vec3::Y * 0.4 * size * (u * PI).sin();
+            }
+        }
+        if std::env::var_os("ILIOS_CAM_DEBUG").is_some() && (t - 230.0).abs() < 0.02 {
+            eprintln!("KIMI stops={:?}", stops);
+        }
+        let _ = last;
+        st.world(p) + KIMI_DIR.normalize() * 600.0 * ease_in((t - last_at - 0.35) / 4.6)
     }
 
     /// Where the two lights of the interlude are heading: from ahead of the camera after
@@ -1413,7 +1437,11 @@ impl World {
         let chime = 0.7 * cue_pulse(DROPS, t, 1.3) + 0.3 * cue_pulse(KEYS, t, 0.5);
         let chime = if t > 250.0 { chime } else { 0.0 };
         let kimi = (0.75 * ease_between(t, 240.0, 262.0) + chime) * (1.0 - ease_between(t, END - 2.5, END - 0.5));
-        let (star_dir, star_amt) = if t < 228.0 { (Vec3::new(0.04, 0.03, -1.0), wish) } else { (KIMI_DIR, kimi) };
+        // In the run at it, the wish star slides onto the vanishing point: the streaks of the
+        // flight leave from it, so it is where we are going.
+        let ahead = { let c = self.camera_at(t); (c.look - c.pos).normalize_or_zero() };
+        let wish_dir = Vec3::new(0.04, 0.03, -1.0).normalize().lerp(ahead, smooth5(clamp01((t - 206.0) / 4.0))).normalize_or_zero();
+        let (star_dir, star_amt) = if t < 228.0 { (wish_dir, wish) } else { (KIMI_DIR, kimi) };
         let iris = window_f(t, BRIDGE - 0.3, BRIDGE_MOON - 1.6, 1.2);
         let voice = window_f(t, BRIDGE_MOON - 1.0, BREAKDOWN, 1.2);
         // The album cover's key: a navy body with cobalt edges.
@@ -1766,7 +1794,7 @@ impl World {
                 debris.push(Particle::new(c - orbit, size, Rgb::hex(0xffb8bd) * (3.0 * tail * pink)).opacity(tail * pink));
             }
         }
-        let kimi_on = window_f(t, 231.0, 235.3, 0.35);
+        let kimi_on = window_f(t, self.lines[37].start + 0.1, 235.3, 0.35);
         if kimi_on > 0.003 {
             for k in 0..40u32 {
                 let tt = t - k as f32 * 0.02;
@@ -1885,15 +1913,16 @@ impl World {
             snare: cue_pulse(SNARE, t, 0.14).min(1.2),
             staff: ease_between(t, 253.4, 254.3) * (1.0 - ease_between(t, 268.5, 271.8)),
             picks: {
-                // Each pick follows its measured note, folded by octaves onto the staff (E4..F5),
-                // so the line keeps the melody's shape and no note falls outside the strings.
+                // Each pick lands on one of the five strings. Its measured note is folded onto the
+                // staff (two diatonic steps to a string), so the line keeps the melody's shape and
+                // every note sits exactly on a string.
                 let n = GUITAR.iter().filter(|g| **g <= t).count();
                 let pick = |back: usize| {
                     if n <= back {
                         return Vec3::ZERO;
                     }
                     let k = n - 1 - back;
-                    Vec3::new((staff_step(GUITAR_NOTES[k]) - 1.0).rem_euclid(7.0) + 1.0, t - GUITAR[k], (-(t - GUITAR[k]) / 0.9).exp())
+                    Vec3::new((staff_step(GUITAR_NOTES[k]).rem_euclid(10.0) / 2.0).floor(), t - GUITAR[k], (-(t - GUITAR[k]) / 0.9).exp())
                 };
                 [pick(0), pick(1)]
             },

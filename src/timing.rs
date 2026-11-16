@@ -176,15 +176,18 @@ pub const GUITAR: &[f32] = &[
     254.295, 254.465, 254.595, 254.754, 254.863, 254.992, 255.193, 255.662, 255.979, 256.101, 256.401, 256.700, 256.989, 257.308, 257.448, 257.757,
     257.897, 258.091, 258.506, 258.795, 258.965, 259.114, 259.295, 259.437, 259.573, 259.693, 260.002, 260.265, 260.601, 261.479, 261.788, 262.078,
     262.397, 263.515, 263.903, 264.183, 265.332, 265.689,
+    // The three hits after the last labelled pick, one beat apart or two, from the onsets of
+    // the 2-8 kHz band (each as strong as the labelled picks round it).
+    266.000, 267.800, 268.690,
 ];
 /// The pitch of each guitar pick (MIDI), estimated from the spectrum that appears after each
 /// onset. Three estimators (free-pitch harmonic sum, a vote over window sizes, a semitone
 /// template limited to the gap before the next pick) agree on 24 picks; the other 14 take the
 /// majority and are a best guess: picks 2, 4–8, 17, 18, 21, 27, 29, 30, 33, 36. The mix is
-/// about 7 cents sharp, and the line fits B♭ major / G minor.
+/// about 7 cents sharp, and the line fits B♭ major / G minor. The last three are a rough guess.
 pub const GUITAR_NOTES: &[u8] = &[
     54, 82, 60, 82, 82, 66, 58, 81, 58, 70, 72, 77, 70, 79, 79, 81, 77, 77, 69, 69, 69, 67, 65, 74, 60, 75, 60, 75, 58, 60,
-    74, 65, 74, 70, 67, 72, 67, 81,
+    74, 65, 74, 70, 67, 72, 67, 81, 43, 50, 65,
 ];
 const _: () = assert!(GUITAR_NOTES.len() == GUITAR.len());
 
