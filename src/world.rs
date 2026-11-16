@@ -529,6 +529,9 @@ pub struct World {
     angel: (NodeId, Vec<(NodeId, Vec3, f32)>),
 }
 
+/// The two souls come out of the dark here, at the start of the interlude.
+const SOULS_BORN: f32 = 96.6;
+
 /// The second voice sings 好きだった again, softly, over the move to 「月」: (word, sung at).
 const ANGEL: &[(&str, f32)] = &[("好き", 185.571), ("だ", 186.2), ("っ", 186.5), ("た", 186.85)];
 const ANGEL_GOLD: u32 = 0xffe2b0;
@@ -1267,7 +1270,7 @@ impl World {
         }
         // 迎えるんだ: the camera backs away, receiving rather than going.
         if i == 25 {
-            dist *= 1.0 + 1.6 * expo_out((t - 168.46) / 3.5);
+            dist *= 1.0 + 0.8 * expo_out((t - 168.46) / 3.5);
         }
         if i == 19 {
             // 見てーみたーかーった: back off a little on the first held note, then far and fast on the long one.
@@ -1408,6 +1411,51 @@ impl World {
         }
         let _ = last;
         st.world(p) + KIMI_DIR.normalize() * 600.0 * ease_in((t - last_at - 0.35) / 4.6)
+    }
+
+    /// The two souls, 君's (blue) and 僕's (pink). They burst out of one point at the start of
+    /// the interlude, lead the camera up to verse 2, then follow you: a little behind the
+    /// camera, wandering round the frame and dancing round each other. On 違う夢 the blue one
+    /// breaks away; the pink one stays with you, alone, through 鉛のような.
+    fn souls(&self, t: f32) -> (Vec3, Vec3) {
+        let follow = ease_between(t, 110.5, 113.5);
+        let split = ease_between(t, 119.8, 124.5);
+        let mut c = self.lights_path(t);
+        let (mut right, mut up, mut fwd) = (Vec3::X, Vec3::Y, Vec3::NEG_Z);
+        let w = world_clock(t);
+        if follow > 0.0 {
+            // Follow a smoothed, slightly late camera, so a whip swings them through the frame
+            // instead of snapping them across it.
+            let (mut pos, mut look, mut u) = (Vec3::ZERO, Vec3::ZERO, Vec3::ZERO);
+            for k in 0..5 {
+                let p = self.camera_at(t - 0.15 - 0.16 * k as f32);
+                pos += p.pos;
+                look += p.look;
+                u += p.up;
+            }
+            let (pos, look) = (pos / 5.0, look / 5.0);
+            fwd = (look - pos).normalize_or_zero();
+            right = fwd.cross(u.normalize_or_zero()).normalize_or_zero();
+            up = right.cross(fwd);
+            // Nearer than the words and roaming round them: they pass in front of the lyric,
+            // drift to the edges and come back.
+            let near = (look - pos).length().min(8.0) * 0.4;
+            let wander = right * (1.5 * (0.31 * w).sin() + 0.5 * (0.73 * w + 2.0).sin())
+                + up * (0.35 + 0.55 * (0.47 * w + 1.0).sin())
+                - fwd * (near + 0.6 * (0.39 * w).sin());
+            c = c.lerp(look + wander, follow);
+        }
+        let grow = smooth5(clamp01((t - SOULS_BORN) / 1.4));
+        let th = 2.0 * w + 0.6 * (0.7 * w).sin();
+        let r = (0.6 + 0.25 * (0.83 * w).sin()) * grow * (1.0 - 0.7 * split);
+        let off = right * (th.cos() * r) + up * (th.sin() * r * 0.6) + fwd * (th.sin() * r * 0.9);
+        let leave = (up * 3.0 + right * 4.0 + fwd * 14.0) * split * split;
+        // Alone, 僕's soul drifts a little on its own.
+        let alone = (right * (0.3 * (1.3 * w).sin()) + up * (0.25 * (0.9 * w + 1.0).cos())) * split;
+        // ...until the warp opens on 見てみたかった: it is pulled ahead into it and is gone when
+        // chorus 2 hits.
+        let into_warp = fwd * 40.0 * ease_in(clamp01((t - 142.4) / 2.1));
+        (c + off + leave, c - off + alone + into_warp)
     }
 
     /// Where the two lights of the interlude are heading: from ahead of the camera after
@@ -2060,31 +2108,43 @@ impl World {
                 }
             }
         }
-        // 二人: two small lights circling each other, from the interlude through verse 2. On
-        // 違う夢 one of them drifts off.
-        let lights_on = window_f(t, 96.5, 125.0, 1.5);
-        if lights_on > 0.003 {
-            let follow = ease_between(t, 110.5, 113.5);
-            let split = ease_between(t, 119.8, 124.5);
+        // 二人: the two souls (see `souls`).
+        let born = ease_out((t - SOULS_BORN) / 0.25);
+        let blue_on = born * (1.0 - ease_between(t, 119.8, 124.5));
+        let pink_on = born * (1.0 - ease_between(t, 143.9, 144.6));
+        if pink_on > 0.003 && t < 144.7 {
             let (mut blue_path, mut pink_path) = (Vec::new(), Vec::new());
-            let leave = |up: Vec3| (up * 2.6 + Vec3::new(2.4, 0.0, -1.5)) * split;
-            for k in 0..56u32 {
-                let tt = t - k as f32 * 0.022;
-                let mut c = self.lights_path(tt);
-                let mut up = Vec3::Y;
-                if follow > 0.0 {
-                    let p = self.camera_at(tt);
-                    up = p.up.normalize_or_zero();
-                    c = c.lerp(p.look + up * 1.9, follow);
-                }
-                let th = tt * 1.1;
-                let orbit = Vec3::new(th.cos() * 0.55, th.sin() * 0.35, th.sin() * 0.55);
-                blue_path.push(c + orbit + leave(up));
-                pink_path.push(c - orbit);
+            for k in 0..48u32 {
+                let tt = (t - k as f32 * 0.024).max(SOULS_BORN);
+                let (b, p) = self.souls(tt);
+                blue_path.push(b);
+                pink_path.push(p);
             }
             let breathe = 1.0 + 0.1 * (t * 5.3).sin() + 0.06 * (t * 8.9 + 1.0).sin();
-            light_trail(&mut debris, &blue_path, 0.115 * breathe, Rgb::hex(0x7fb0ff), lights_on * (1.0 - split));
-            light_trail(&mut debris, &pink_path, 0.115 * (2.0 - breathe), Rgb::hex(0xff8f9c), lights_on);
+            for (path, hex, on, br) in [(&blue_path, 0x7fb0ff, blue_on, breathe), (&pink_path, 0xff8f9c, pink_on, 2.0 - breathe)] {
+                if on <= 0.003 {
+                    continue;
+                }
+                // Keep their size on screen when they hang further off.
+                let width = 0.012 * (6.0 + (path[0] - cam_now.pos).length() * 0.5) * br;
+                light_trail(&mut debris, path, width, Rgb::hex(hex), on);
+                // A halo in the soul's colour, so it reads as blue or pink even when still.
+                for (k, e) in [(2.4_f32, 0.6_f32), (4.5, 0.22), (8.0, 0.07)] {
+                    debris.push(Particle::new(path[0], width * k, Rgb::hex(hex) * (e * on)).opacity((e * on).min(1.0)));
+                }
+            }
+            // Born: both burst out of one point in a spray of sparks.
+            let age = t - SOULS_BORN;
+            if (0.0..2.2).contains(&age) {
+                let at = self.lights_path(SOULS_BORN);
+                for k in 0..36u32 {
+                    let dir = Vec3::new(hash3(k, 71) - 0.5, hash3(k, 72) - 0.5, hash3(k, 73) - 0.5).normalize_or_zero();
+                    let p = at + dir * (1.2 + 2.2 * hash3(k, 74)) * (1.0 - (-age * 2.6).exp()) - Vec3::Y * 0.25 * age * age;
+                    let col = if k % 2 == 0 { 0x9cc2ff } else { 0xffa3b2 };
+                    glow(&mut debris, p, 0.03, Rgb::hex(col), 0.6 * (1.0 - age / 2.2).powi(2));
+                }
+                glow(&mut debris, at, 0.12, Rgb::hex(0xffffff), 1.2 * (-age / 0.35).exp());
+            }
         }
         let kimi_on = window_f(t, self.lines[37].start + 0.1, 235.3, 0.35);
         if kimi_on > 0.003 {
