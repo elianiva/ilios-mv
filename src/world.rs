@@ -268,8 +268,8 @@ fn specs() -> Vec<LineSpec> {
         line([0.5, 2.0, -244.0], 0.0, 0.0, 0.0, h, 3.0, drop, shot(5.6, 48.0, 0.0)),
         // 13-15 Verse 2: phrase after phrase into the depth, each line bending off from the last.
         line([0.0, 10.0, -272.0], 0.0, 0.0, 0.0, pu, 0.8, drop, shot(6.0, 44.0, 1.6)),
-        line([1.0, 9.6, -300.0], 22.0, 0.0, 0.0, pu, 0.8, drop, shot(6.0, 44.0, 1.1)),
-        line([-5.8, 10.0, -321.0], -20.0, 0.0, 0.0, pu, 0.8, drop, shot(6.0, 44.0, 1.1)),
+        line([0.6, 9.8, -290.0], 12.0, 0.0, 0.0, pu, 0.8, drop, shot(6.0, 44.0, 1.1)),
+        line([-3.0, 10.0, -306.0], -10.0, 0.0, 0.0, pu, 0.8, drop, shot(6.0, 44.0, 1.1)),
         // 16-18 Pre-chorus 2: the eyes drop to the town. Heavy.
         line([0.0, -4.0, -362.0], 0.0, -55.0, 0.0, h, 0.9, drop, shot(6.4, 46.0, 0.5)),
         line([-2.0, -5.0, -374.0], 0.0, -55.0, 6.0, h, 0.78, drop, shot(5.8, 44.0, 0.8)),
@@ -844,6 +844,8 @@ impl World {
                 (Some(8), _) => (first - 0.4, 75.7),
                 (Some(11), _) => (first - 0.4, 90.1),
                 (Some(21), _) => (first - 0.4, 158.25),
+                // その目が僕は好きだった is gone before the second voice comes in at 185.57.
+                (Some(27), _) => (first - 0.4, 184.8),
                 // The first 僕を置いて is gone before the second appears in front of it.
                 (Some(37), _) => (first - 0.4, 245.7),
                 (_, Some(n)) => (first - 0.4, n + 2.0),
