@@ -31,7 +31,7 @@ const BOXED: &[(usize, &str)] = &[
     (16, "鉛"), (16, "足"),
     (20, "鉄"), (21, "苦"), (22, "僕"), (23, "独り"), (23, "きり"), (24, "迎える"),
     (26, "エメラルド"), (29, "アメジスト"), (4, "青い"), (4, "世界"),
-    (34, "僕\""), (35, "独り"), (35, "きり"), (37, "僕"),
+    (34, "\"僕\""), (35, "独り"), (35, "きり"), (37, "僕"),
 ];
 
 /// Lines whose glyphs fly in from scattered depth and assemble (magnetic-style).
@@ -211,7 +211,7 @@ const WORD_STYLES: &[(usize, &str, f32, Option<u32>, bool)] = &[
     (30, "声", 1.6, Some(AMETHYST), false),
     (30, "好き", 1.3, None, false),
     // Final chorus.
-    (34, "僕\"", 2.0, None, true),
+    (34, "\"僕\"", 2.0, None, true),
     (35, "独り", 1.5, None, false),
     (35, "きり", 1.5, None, false),
     (36, "行", 1.5, Some(BLUE_HOT), false),
@@ -229,7 +229,7 @@ const BREAKS: &[(usize, &str)] = &[
     (19, "も"), (19, "繰り返し"), (20, "が"), (20, "奏でる"), (22, "ない"), (23, "ただ"), (24, "て"),
     (25, "話す"), (27, "が"), (28, "話す"), (30, "が"),
     (31, "叶う"), (32, "て"),
-    (34, "きっと\""), (34, "僕\""), (35, "ただ"), (37, "な"),
+    (34, "きっと"), (34, "\"僕\""), (35, "ただ"), (37, "な"),
 ];
 
 /// One flight. Every line hangs ahead of the last on the same course (further along -z), so
@@ -907,6 +907,8 @@ impl World {
                 let color = Rgb::hex(style.and_then(|s| s.3).unwrap_or(TEXT));
                 let slam = style.is_some_and(|s| s.4) || lrc.is_none();
                 for ch in word.text.chars() {
+                    // Quote marks stay small next to an enlarged word.
+                    let scale = if ch == '"' { scale.min(1.1) } else { scale };
                     rows.last_mut().unwrap().push((wi, ch, scale, color, slam));
                 }
                 let forced = lrc.is_some_and(|i| BREAKS.contains(&(i, word.text.as_str())));
@@ -955,6 +957,9 @@ impl World {
                         Flow::PunchBack => Vec3::new(pen, row_y, ri as f32 * PUNCH_D),
                         _ => Vec3::new(pen, row_y, 0.0),
                     };
+                    // ...and hang from the top of the word they mark.
+                    let word_sc = WORD_STYLES.iter().find(|w| Some(w.0) == *lrc && w.1 == line.words[*wi].text).map_or(1.0, |w| w.2);
+                    let base = if *ch == '"' { base + Vec3::new(0.0, size * (word_sc - sc) * 0.8, 0.0) } else { base };
                     pen += match spec.flow {
                         Flow::Vertical => -s * 1.06,
                         _ => advances[k] + track,
