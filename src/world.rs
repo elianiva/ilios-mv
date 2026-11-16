@@ -518,7 +518,17 @@ pub struct World {
     /// メロディア's staff: (group, rest position, from, to).
     staffs: Vec<(NodeId, Vec3, f32, f32, f32, Vec<(NodeId, f32, f32)>)>,
     dust: Vec<(Vec3, f32, f32, f32)>,
+    /// The second voice's 好きだった, in a scene of its own so the post shader can haze it:
+    /// a group that travels with the camera, and its letters as (letter, rest position, when it
+    /// is sung).
+    angel_scene: Scene,
+    angel_renderer: Renderer,
+    angel: (NodeId, Vec<(NodeId, Vec3, f32)>),
 }
+
+/// The second voice sings 好きだった again, softly, over the move to 「月」: (word, sung at).
+const ANGEL: &[(&str, f32)] = &[("好き", 185.571), ("だ", 186.2), ("っ", 186.5), ("た", 186.85)];
+const ANGEL_GOLD: u32 = 0xffe2b0;
 
 pub struct Frame3d {
     pub world: fframes::media::ImageData<'static>,
@@ -582,6 +592,9 @@ pub struct Frame3d {
     pub picks: [Vec3; 2],
     /// Vocal echo: (seconds since, amount).
     pub echo: (f32, f32),
+    /// The second voice's 好きだった, drawn hazy behind the lyrics, and how much of it shows.
+    pub angel: fframes::media::ImageData<'static>,
+    pub angel_amt: f32,
 }
 
 /// YOASOBI-style bursts: a red noise frame, then an inverted frame (2 frames each).
@@ -1104,6 +1117,27 @@ impl World {
             }
             staffs.push((g, base, t0, t1, size, parts));
         }
+        let mut angel_scene = Scene::new();
+        let angel_group = angel_scene.add(Node::group().hidden());
+        let mut angel = Vec::new();
+        {
+            let size = 0.42;
+            let track = 0.1 * size;
+            let letters: Vec<(char, f32)> =
+                ANGEL.iter().flat_map(|(w, at)| w.chars().enumerate().map(move |(k, c)| (c, at + 0.07 * k as f32))).collect();
+            let total: f32 = letters.iter().map(|(c, _)| glyph_in(false, *c).map_or(0.0, |g| g.1) * size + track).sum::<f32>() - track;
+            let mut pen = -total * 0.5;
+            for (c, at) in letters {
+                let Some((geo, adv)) = glyph_in(false, c) else { continue };
+                let base = Vec3::new(pen, -size * 0.36, 0.0);
+                let node = angel_scene.add_to(
+                    angel_group,
+                    Node::mesh(geo, Material::unlit(Rgb::hex(TEXT)).transparent().opacity(0.0)).with_position(base).scaled(size),
+                );
+                angel.push((node, base, at));
+                pen += adv * size + track;
+            }
+        }
         let hash = |i: u32, s: u32| -> f32 {
             let mut x = i.wrapping_mul(0x9E3779B1) ^ s.wrapping_mul(0x85EBCA77);
             x ^= x >> 15;
@@ -1134,6 +1168,9 @@ impl World {
             lines: line_insts,
             staffs,
             dust,
+            angel_scene,
+            angel_renderer: Renderer::new(width, height).tone_mapping(ToneMapping::Linear),
+            angel: (angel_group, angel),
         }
     }
 
@@ -1433,6 +1470,124 @@ impl World {
         pose
     }
 
+    /// The second voice's 好きだった, like a guardian over the one who sings. It comes down out
+    /// of the light above the frame and stays with the camera as it moves on to 「月」: a halo
+    /// over the words, two wings of light that open round the frame, a few feathers falling.
+    /// As the next line begins it lifts away.
+    fn pose_angel(&self, ts: &mut Scene, debris: &mut Vec<Particle>, t: f32, cam: &CamPose) -> f32 {
+        let (group, letters) = &self.angel;
+        let (a0, a1) = (ANGEL[0].1 - 0.3, BRIDGE_MOON + 0.6);
+        let on = window_f(t, a0, a1, 0.6);
+        ts[*group].visible = on > 0.003;
+        if !ts[*group].visible {
+            return 0.0;
+        }
+        let camera = cam.camera();
+        let fwd = camera.forward();
+        let right = fwd.cross(camera.up_vector()).normalize_or_zero();
+        let up = right.cross(fwd);
+        let rot = Quat::from_mat3(&Mat3::from_cols(right, up, -fwd));
+        // Six metres ahead, scaled with the lens so it keeps its size on screen through the move.
+        let scale = (deg(cam.fov) * 0.5).tan() / deg(22.0).tan();
+        let leave = ease_in(clamp01((t - BRIDGE_MOON + 0.2) / 0.9));
+        let lift = 1.05 - 0.10 * (t - ANGEL[0].1) + 0.9 * leave;
+        // It glides in from the upper right, clear of その目が, and settles over the middle.
+        let glide = 1.5 * (1.0 - smooth5(clamp01((t - ANGEL[0].1 + 0.2) / 1.3)));
+        let centre = cam.pos + fwd * 6.0 + rot * Vec3::new(glide, 0.35 * glide, 0.0) * scale;
+        ts[*group].position = centre;
+        ts[*group].rotation = rot;
+        ts[*group].scale = Vec3::splat(scale);
+        let world = |p: Vec3| centre + rot * (p * scale);
+        let gold = Rgb::hex(ANGEL_GOLD);
+
+        for (k, (node, base, at)) in letters.iter().enumerate() {
+            let since = t - at;
+            let d = expo_out(since / 1.1);
+            let sway = 0.025 * (t * 1.3 + k as f32 * 0.9).sin();
+            // Each letter floats down out of the light, stretched tall, and settles.
+            let p = *base + Vec3::new(sway, lift + 0.45 * (1.0 - d) + 0.25 * leave * hash3(k as u32, 41), 0.0);
+            let opacity = expo_out(since / 0.4) * on * (1.0 - leave);
+            let n = &mut ts[*node];
+            n.visible = since > 0.0 && opacity > 0.002;
+            n.position = p;
+            n.scale = Vec3::new(0.42 * (0.9 + 0.1 * d), 0.42 * (1.0 + 0.5 * (1.0 - d)), 0.42);
+            if let Some(m) = n.material_mut() {
+                // Only the coverage matters: the shader gives it its colour and haze.
+                m.opacity = opacity * (0.75 + 0.25 * (-(since.max(0.0)) / 1.0).exp());
+            }
+        }
+
+        let born = expo_out((t - ANGEL[0].1 + 0.25) / 0.9) * on;
+        // The halo: a soft ring of light over the words, seen a little from below, with a
+        // brighter glint running round it.
+        let halo_c = Vec3::new(0.0, lift + 0.62, -0.3);
+        let r = 0.5 * (0.7 + 0.3 * born);
+        for k in 0..120 {
+            let a = TAU * k as f32 / 120.0;
+            let glint = (0.5 + 0.5 * (a - t * 1.8).cos()).powi(6);
+            let p = halo_c + Vec3::new(a.cos() * r, a.sin() * r * 0.22, a.sin() * 0.25);
+            let amt = 0.6 * born * (1.0 - leave) * (0.35 + 0.65 * glint);
+            debris.push(Particle::new(world(p), 0.012 * scale, Rgb::hex(0xffffff).lerp(gold, 0.25) * (0.9 * amt)).opacity(amt.min(1.0)));
+            debris.push(Particle::new(world(p), 0.06 * scale, gold * (0.12 * amt)).opacity((0.35 * amt).min(1.0)));
+            debris.push(Particle::new(world(p), 0.2 * scale, gold * (0.02 * amt)).opacity((0.1 * amt).min(1.0)));
+        }
+        // Wings: from either side of the words an arm of light rises and reaches out, and
+        // feathers hang from it, longest at the tip. They open from folded until they span the
+        // frame, as if to shelter it. Faint: a shape in the light, not a drawing.
+        let unfold = smooth5(clamp01((t - ANGEL[0].1 - 0.1) / 1.8));
+        let wings = 0.7 * born * (1.0 - leave) * (0.85 + 0.15 * (t * 1.7).sin());
+        let beat = 0.06 * (t * 2.1).sin();
+        for side in [-1.0_f32, 1.0] {
+            let reach = 0.3 + 0.7 * unfold;
+            // The arm: shoulder, up to the wrist, out and down to the tip.
+            let arm = |u: f32| {
+                let x = 0.7 + 2.6 * u * reach;
+                let y = lift + 0.05 + (0.95 + beat) * (u * PI * 0.8).sin() * (0.6 + 0.4 * reach) - 0.35 * u * u;
+                Vec3::new(x * side, y, -1.0 - 0.6 * u)
+            };
+            let mut stroke = |a: Vec3, b: Vec3, amt: f32| {
+                let steps = (((b - a).length() / 0.012) as usize).clamp(2, 400);
+                for s in 0..steps {
+                    let x = (s as f32 + 0.5) / steps as f32;
+                    let p = world(a.lerp(b, x));
+                    let k = amt * (x * PI).sin().powf(0.5);
+                    debris.push(Particle::new(p, 0.022 * scale, Rgb::hex(0xffffff).lerp(gold, 0.4) * (0.2 * k)).opacity((0.6 * k).min(1.0)));
+                    debris.push(Particle::new(p, 0.1 * scale, gold * (0.02 * k)).opacity((0.2 * k).min(1.0)));
+                }
+            };
+            for k in 0..24 {
+                stroke(arm(k as f32 / 24.0), arm((k + 1) as f32 / 24.0), 1.3 * wings);
+            }
+            for f in 0..15 {
+                let u = (f as f32 + 0.5) / 15.0;
+                let root = arm(u);
+                // Each feather hangs down and sweeps outward more toward the tip.
+                let ang = deg(-8.0 - 52.0 * u) * unfold + 0.04 * (t * 1.3 + f as f32).sin();
+                let dir = Vec3::new(-ang.sin() * side, -ang.cos(), 0.0);
+                let len = (0.45 + 1.3 * u * u) * (0.3 + 0.7 * unfold);
+                stroke(root, root + dir * len, wings * (0.9 - 0.3 * u));
+            }
+        }
+        // Feathers drifting down through the frame.
+        for k in 0..28u32 {
+            let h = |s: u32| hash3(k, s);
+            let birth = ANGEL[0].1 + 1.6 * h(1);
+            let age = t - birth;
+            if age < 0.0 {
+                continue;
+            }
+            let fall = 0.55 + 0.4 * h(2);
+            let p = Vec3::new(
+                (h(3) - 0.5) * 7.0 + 0.25 * (age * (1.2 + h(4)) + 6.0 * h(5)).sin(),
+                2.6 - 0.6 * h(6) - fall * age,
+                -0.5 - 2.5 * h(7),
+            );
+            let amt = ease_out(age / 0.5) * on * (1.0 - 0.6 * leave) * (0.4 + 0.6 * h(8));
+            glow(debris, world(p), 0.016 * scale, gold, 0.55 * amt);
+        }
+        on
+    }
+
     /// World and lyric images, plus the post-process inputs for this frame.
     pub fn render(&self, t: f32, dt: f32, audio: &Audio) -> Frame3d {
         let mut s = self.scene.clone();
@@ -1462,6 +1617,9 @@ impl World {
         } else {
             (gem_color, 0.45 * gem)
         };
+        // The second voice's 好きだった comes with warm light from above.
+        let grace = window_f(t, ANGEL[0].1 - 0.2, BRIDGE_MOON + 0.4, 0.7);
+        let (ray_color, rays) = (ray_color.lerp(Vec3::new(1.0, 0.86, 0.66), grace), rays.max(0.45 * grace));
 
         // Ilios, the sun this town never sees: it hangs eclipsed where 君 looks (behind 青い世界
         // and the last chorus). The moon only moves off in the last chorus, and covers it
@@ -1845,6 +2003,8 @@ impl World {
             let far = (path[0] - cam_now.pos).length();
             light_trail(&mut debris, &path, 0.018 * (6.0 + far * 0.5), Rgb::hex(0x7fb0ff), kimi_on);
         }
+        let mut asc = self.angel_scene.clone();
+        let angel_amt = self.pose_angel(&mut asc, &mut debris, t, &cam_now);
         if !debris.is_empty() {
             s.add(Node::particles(debris, Blending::Additive));
         }
@@ -1972,6 +2132,8 @@ impl World {
                 let key = |n: usize| struck.get(n).map_or(Vec3::ZERO, |&(c, k)| Vec3::new(0.08 + 0.84 * (c * 7.31).fract(), t - c, k * (-(t - c) / 0.7).exp()));
                 [key(0), key(1)]
             },
+            angel: self.angel_renderer.render(&asc, &camera),
+            angel_amt,
             echo: VOCAL_ECHO.iter().rev().find(|c| **c <= t).map_or((9.0, 0.0), |c| (t - c, (-(t - c) / 0.55).exp())),
         }
     }

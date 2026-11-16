@@ -335,6 +335,8 @@ impl Video for IliosVideo<'_> {
                 .float3("uKeyB", f.keys[1].x, f.keys[1].y, f.keys[1].z)
                 .float("uEcho", f.echo.0)
                 .float("uEchoAmt", f.echo.1)
+                .image("uAngel", &f.angel)
+                .float("uAngelAmt", f.angel_amt)
                 .float3("uGlowCol", f.glow_col.x, f.glow_col.y, f.glow_col.z)
                 .float("uGlowAmt", f.glow_amt * (0.85 + 0.45 * audio.low))
                 .float3("uAtmo", 0.16, 0.20, 0.46)

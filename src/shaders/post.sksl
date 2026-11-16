@@ -65,6 +65,8 @@ uniform float3 uKeyB;
 uniform float uSwell;    // the big synth swell: the sky and the air breathe in
 uniform float uEcho;     // seconds since a vocal echo
 uniform float uEchoAmt;
+uniform shader uAngel;   // the second voice's 好きだった, coverage only
+uniform float uAngelAmt;
 uniform float uBeat;     // beat pulse in the choruses
 uniform float uToll;     // chorus downbeat, struck like iron: seconds since
 uniform float uTollAmt;
@@ -503,6 +505,32 @@ half4 main(float2 p0) {
     tx /= 16.0;
 
     float3 col = bg * (1.0 - w.a) + w.rgb;
+
+    // The second voice, 好きだった: a voice from behind, not a lyric. The letters are only
+    // breathed onto the air: wavering like heat, blurred, warm, and their light rises off them.
+    if (uAngelAmt > 0.001) {
+        float2 hw = float2(noise(p * 0.009 + float2(0.0, iTime * 0.7)), noise(p * 0.009 + float2(7.3, iTime * 0.55))) - 0.5;
+        float2 hq = p + hw * 5.0;
+        float core = 0.0;
+        for (int i = 0; i < 8; i++) {
+            float ga = float(i) * 0.785398;
+            core += uAngel.eval(hq + float2(cos(ga), sin(ga)) * 2.2).a;
+        }
+        core /= 8.0;
+        float soft = 0.0;
+        for (int i = 0; i < 16; i++) {
+            float ga = float(i) * 2.39996;
+            soft += uAngel.eval(hq + float2(cos(ga), sin(ga)) * (6.0 + float(i) * 1.5)).a;
+        }
+        soft /= 16.0;
+        float rise = 0.0;
+        for (int i = 1; i <= 8; i++) {
+            rise += uAngel.eval(hq + float2(hw.x * 6.0 * float(i), float(i) * 7.0)).a / float(i);
+        }
+        float shimmer = 0.88 + 0.12 * noise(p * 0.02 + float2(iTime * 1.1, 0.0));
+        float haze = (0.32 * core + 0.4 * soft + 0.06 * rise) * shimmer;
+        col += float3(1.0, 0.90, 0.76) * haze * uAngelAmt * 0.8;
+    }
 
     // Soft glow behind the lyrics.
     float glow = 0.0;
