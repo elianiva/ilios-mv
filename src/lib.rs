@@ -307,6 +307,8 @@ impl Video for IliosVideo<'_> {
                 .float("uDome", f.dome)
                 .float("uStop", f.stop)
                 .float("uFlash", f.flash)
+                .float("uReveal", f.reveal.0)
+                .float("uRevealAmt", f.reveal.1)
                 .float3("uSunDir", f.sun_dir.x, f.sun_dir.y, f.sun_dir.z)
                 .float("uSunR", 0.11)
                 .float("uSunAmt", f.sun_amt)

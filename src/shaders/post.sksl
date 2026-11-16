@@ -26,6 +26,8 @@ uniform float uCrt;      // CRT switching off: 0 → 1 squashes to a line
 uniform float uDome;     // time stop: radius of the inverted dome (0 = none)
 uniform float uStop;     // time stopped: grey, still, a little warped
 uniform float uFlash;    // white bloom out of the wormhole
+uniform float uReveal;   // the soft white reveal: radius of the opening disc, in half-heights
+uniform float uRevealAmt;
 uniform float3 uSunDir;  // where the eclipsed sun hangs in the sky
 uniform float uSunR;     // its angular radius, radians
 uniform float uSunAmt;   // 0 = not in this sky
@@ -624,6 +626,16 @@ half4 main(float2 p0) {
         col += float3(0.8, 0.85, 1.0) * exp(-pow((rd - uDome) * 30.0, 2.0)) * 0.6;
     }
     col = mix(col, float3(0.96, 0.94, 1.0), clamp(uFlash, 0.0, 1.0) * 0.85);
+    // Reveal: light opens out from the centre, its edge soft and brightest, and the picture
+    // comes back through it as it thins.
+    if (uRevealAmt > 0.001) {
+        float rr = length((p0 - res * 0.5) / float2(res.y * 0.5));
+        float inside = smoothstep(uReveal + 0.35, uReveal - 0.35, rr);
+        float edge = exp(-pow((rr - uReveal) * 3.0, 2.0));
+        float3 white = float3(0.97, 0.95, 1.0);
+        col = mix(col, white, clamp(inside * uRevealAmt * 0.9, 0.0, 1.0));
+        col += white * edge * uRevealAmt * 0.35;
+    }
     if (uTV > 0.001) {
         float l = dot(col, float3(0.299, 0.587, 0.114));
         float redness = smoothstep(0.08, 0.3, col.r - max(col.g, col.b));

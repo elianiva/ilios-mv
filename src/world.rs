@@ -564,6 +564,8 @@ pub struct Frame3d {
     pub dome: f32,
     pub stop: f32,
     pub flash: f32,
+    /// The soft white reveal on the big hits: (radius, amount).
+    pub reveal: (f32, f32),
     pub sun_dir: Vec3,
     pub sun_amt: f32,
     /// 0 = totality, 1 = the sun stands clear of the moon.
@@ -605,7 +607,22 @@ pub struct Frame3d {
 /// YOASOBI-style bursts: a red noise frame, then an inverted frame (2 frames each).
 const BURSTS: &[f32] = &[];
 /// Single inverted frames.
-const INVERTS: &[f32] = &[BAND_IN];
+const INVERTS: &[f32] = &[];
+/// A soft white reveal opens out from the centre on these hits (see `reveal`).
+const REVEALS: &[f32] = &[BAND_IN, CHORUS_1, CHORUS_2, FINAL];
+
+/// The reveal: (radius of the opening disc in half-heights, how bright it is). It swells in
+/// over a few frames before the hit, opens fast and thins away over about 1.6 s.
+fn reveal(t: f32) -> (f32, f32) {
+    let Some(c) = REVEALS.iter().rev().find(|c| t >= **c - 0.15) else { return (0.0, 0.0) };
+    let s = t - c;
+    if s > 2.2 {
+        return (0.0, 0.0);
+    }
+    let radius = 0.1 + 2.6 * expo_out((s + 0.15) / 1.7);
+    let amt = 0.85 * ease_between(s, -0.15, 0.08) * (1.0 - ease_between(s, 0.0, 1.8)).powi(2);
+    (radius, amt)
+}
 const GLITCHES: &[(f32, f32)] = &[(49.09, 0.2), (49.98, 0.25), (CHORUS_1, 0.2), (BAND_BACK, 0.3), (130.69, 0.4), (FINAL, 0.35)];
 const SPEED_LINES: &[(f32, f32)] = &[];
 
@@ -2201,9 +2218,8 @@ impl World {
                 })
                 .fold(0.0, f32::max),
             stop: TIME_STOPS.iter().map(|&(a, b)| window_f(t, a + 0.35, b - 0.1, 0.25)).fold(0.0, f32::max),
-            flash: (-((t - CHORUS_1).max(0.0)) / 0.28).exp() * if t >= CHORUS_1 - 0.02 { 1.0 } else { 0.0 } * 0.9
-                + TIME_STOPS.iter().map(|&(_, b)| 0.45 * (-((t - b).max(0.0)) / 0.25).exp() * if t >= b { 1.0 } else { 0.0 }).sum::<f32>()
-                + 1.0 * (-((t - FINAL).max(0.0)) / 0.5).exp() * if t >= FINAL { 1.0 } else { 0.0 }
+            reveal: reveal(t),
+            flash: TIME_STOPS.iter().map(|&(_, b)| 0.45 * (-((t - b).max(0.0)) / 0.25).exp() * if t >= b { 1.0 } else { 0.0 }).sum::<f32>()
                 + 0.6 * (-((t - 90.1).max(0.0)) / 0.3).exp() * if t >= 90.1 { 1.0 } else { 0.0 },
             crt: 0.0,
             sun_dir: Vec3::new(0.0, -0.262, -0.965),
