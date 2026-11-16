@@ -339,7 +339,7 @@ impl Video for IliosVideo<'_> {
                 .float("uAngelAmt", f.angel_amt)
                 .float3("uGlowCol", f.glow_col.x, f.glow_col.y, f.glow_col.z)
                 .float("uGlowAmt", f.glow_amt * (0.85 + 0.45 * audio.low))
-                .float3("uAtmo", 0.16, 0.20, 0.46)
+                .float3("uAtmo", f.atmo.x, f.atmo.y, f.atmo.z)
                 .float("uDay", f.eclipse)
                 .float("uStars", 0.62 * (0.7 + 0.6 * audio.high))
                 .float4("uComet", f.comet[0], f.comet[1], f.comet[2], f.comet[3])

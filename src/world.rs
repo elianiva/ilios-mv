@@ -592,6 +592,8 @@ pub struct Frame3d {
     pub picks: [Vec3; 2],
     /// Vocal echo: (seconds since, amount).
     pub echo: (f32, f32),
+    /// Colour of the air on the planet's limb.
+    pub atmo: Vec3,
     /// The second voice's 好きだった, drawn hazy behind the lyrics, and how much of it shows.
     pub angel: fframes::media::ImageData<'static>,
     pub angel_amt: f32,
@@ -1620,6 +1622,18 @@ impl World {
         // The second voice's 好きだった comes with warm light from above.
         let grace = window_f(t, ANGEL[0].1 - 0.2, BRIDGE_MOON + 0.4, 0.7);
         let (ray_color, rays) = (ray_color.lerp(Vec3::new(1.0, 0.86, 0.66), grace), rays.max(0.45 * grace));
+        // The air on the planet's limb. Blue is its home (the album's cobalt, brightest under
+        // 青い世界), but it takes the colour of the moment: dusk under 鉛のような, the gems in the
+        // bridge, gold under the second voice, and it nearly goes out when the floor drops.
+        let atmo = {
+            let mut a = Vec3::new(0.16, 0.20, 0.46);
+            a += Vec3::new(0.03, 0.08, 0.22) * blue;
+            a = a.lerp(Vec3::new(0.15, 0.12, 0.30), 0.7 * window_f(t, INTERLUDE, BAND_BACK - 0.5, 2.0));
+            a = a.lerp(Vec3::new(0.30, 0.10, 0.18), 0.8 * window_f(t, BAND_BACK - 0.3, CHORUS_2 - 0.6, 0.8));
+            a = a.lerp(gem_color * 0.42, gem);
+            a = a.lerp(Vec3::new(0.40, 0.30, 0.18), grace);
+            a * (1.0 - 0.65 * window_f(t, BREAKDOWN + 0.5, BAND_RETURN, 1.5))
+        };
 
         // Ilios, the sun this town never sees: it hangs eclipsed where 君 looks (behind 青い世界
         // and the last chorus). The moon only moves off in the last chorus, and covers it
@@ -2134,6 +2148,7 @@ impl World {
             },
             angel: self.angel_renderer.render(&asc, &camera),
             angel_amt,
+            atmo,
             echo: VOCAL_ECHO.iter().rev().find(|c| **c <= t).map_or((9.0, 0.0), |c| (t - c, (-(t - c) / 0.55).exp())),
         }
     }
