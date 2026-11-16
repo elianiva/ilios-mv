@@ -229,6 +229,11 @@ impl Video for IliosVideo<'_> {
         let t = frame.seconds();
         let audio = audio_features(&frame, ctx);
         let f = self.world.render(t, 1.0 / Self::FPS as f32, &audio);
+        // Letterbox: the picture is wide in the verses and opens up on every chorus hit.
+        let open = (ease_between(t, CHORUS_1 - 0.05, CHORUS_1 + 0.3) * (1.0 - ease_between(t, 91.0, 96.0)))
+            .max(ease_between(t, CHORUS_2 - 0.05, CHORUS_2 + 0.3) * (1.0 - ease_between(t, 171.0, 175.0)))
+            .max(ease_between(t, FINAL - 0.05, FINAL + 0.3) * (1.0 - ease_between(t, 248.0, 254.0)));
+        let bars = 0.085 * (1.0 - open);
         let b = |k: usize| audio.bins.get(k).copied().unwrap_or(0.0);
         let mut uniforms = ShaderUniforms::new();
         for (g, name) in ["uB0", "uB1", "uB2", "uB3", "uB4", "uB5", "uB6", "uB7"].into_iter().enumerate() {
@@ -273,9 +278,21 @@ impl Video for IliosVideo<'_> {
                 .float("uShade", 0.0)
                 .float3("uStarDir", f.star_dir.x, f.star_dir.y, f.star_dir.z)
                 .float("uStarAmt", f.star_amt)
-                .float3("uIrisDir", 0.0, 0.05, 1.0)
+                .float3("uIrisDir", 0.0, 0.05, -1.0)
                 .float("uIris", f.iris)
                 .float("uVoice", f.voice)
+                .float("uBars", bars)
+                .float("uBeat", f.beat)
+                .float("uSwell", f.swell)
+                .float("uSnare", f.snare)
+                .float("uStaff", f.staff)
+                .float3("uPickA", f.picks[0].x, f.picks[0].y, f.picks[0].z)
+                .float3("uPickB", f.picks[1].x, f.picks[1].y, f.picks[1].z)
+                .float3("uDrop", f.drop.x, f.drop.y, f.drop.z)
+                .float3("uKeyA", f.keys[0].x, f.keys[0].y, f.keys[0].z)
+                .float3("uKeyB", f.keys[1].x, f.keys[1].y, f.keys[1].z)
+                .float("uEcho", f.echo.0)
+                .float("uEchoAmt", f.echo.1)
                 .float("uRipple", f.ripple)
                 .float("uRippleAmt", f.ripple_amt)
                 .float3("uGlowCol", f.glow_col.x, f.glow_col.y, f.glow_col.z)
@@ -294,7 +311,8 @@ impl Video for IliosVideo<'_> {
         let card_rule = ease_out((t - CHIMES[0] - 0.4) / 1.4);
         let rule = ease_out((t - 29.3) / 0.8);
         // The frame steps aside for the big moments (the wormhole, the CRT, the end card).
-        let hud_op = ease_out((t - 2.0) / 1.5) * (1.0 - f.twirl) * (1.0 - f.crt) * (1.0 - card) * (1.0 - 0.6 * f.flash)
+        // The old frame of corner marks and rulers is gone; the picture carries its own look now.
+        let hud_op = 0.0 * ease_out((t - 2.0) / 1.5) * (1.0 - f.twirl) * (1.0 - f.crt) * (1.0 - card) * (1.0 - 0.6 * f.flash)
             * (1.0 - ease_between(t, OUTRO - 1.0, OUTRO + 1.0));
 
         fframes::svgr!(

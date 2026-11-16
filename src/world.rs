@@ -227,10 +227,7 @@ const BREAKS: &[(usize, &str)] = &[
 ];
 
 /// One flight. Every line hangs ahead of the last on the same course (further along -z), so
-/// the camera reaches the next line by flying on through the one it was reading. Chorus 2 and
-/// the bridge are the same flight seen backwards: the camera faces where it came from and the
-/// words arrive from behind it (迎える, and 好きだった is a memory). It turns round once, for
-/// the wish star.
+/// the camera reaches the next line by flying on through the one it was reading.
 fn specs() -> Vec<LineSpec> {
     let shot = |dist, fov, whip| Shot { dist, fov, ox: 0.0, oy: 0.0, whip };
     let line = |pos: [f32; 3], yaw: f32, pitch: f32, roll: f32, flow, size, entrance, shot| LineSpec {
@@ -244,7 +241,7 @@ fn specs() -> Vec<LineSpec> {
         arc: false,
     };
     let (h, v, st, tr) = (Flow::Horizontal, Flow::Vertical, Flow::Stack, Flow::Travel);
-    let (drop, slam, rise, fall) = (Entrance::Drop, Entrance::Slam, Entrance::Rise, Entrance::Fall);
+    let (drop, slam, rise) = (Entrance::Drop, Entrance::Slam, Entrance::Rise);
     let mut out = vec![
         // 0-2 Verse 1.
         line([-1.5, 3.4, -6.0], 14.0, 0.0, 0.0, v, 0.78, drop, shot(5.4, 42.0, 0.0)),
@@ -262,30 +259,30 @@ fn specs() -> Vec<LineSpec> {
         line([-1.5, 2.5, -172.0], 0.0, 0.0, 5.0, h, 0.85, drop, shot(5.6, 48.0, 0.95)),
         line([0.0, 2.0, -186.0], 0.0, 0.0, 0.0, tr, 0.9, drop, shot(5.6, 48.0, 0.7)),
         // 向こうへと向かうんだ: far ahead on the line of flight, and it only gets further away.
-        line([0.5, 2.0, -244.0], 0.0, 0.0, 0.0, h, 3.0, drop, shot(5.6, 48.0, 0.45)),
+        line([0.5, 2.0, -244.0], 0.0, 0.0, 0.0, h, 3.0, drop, shot(5.6, 48.0, 0.0)),
         // 13-15 Verse 2: laid out into the depth, each bending off from the last.
         line([0.0, 10.0, -272.0], 0.0, 0.0, 0.0, tr, 0.62, drop, shot(6.0, 44.0, 1.6)),
         line([1.0, 9.6, -300.0], 22.0, 0.0, 0.0, tr, 0.62, drop, shot(6.0, 44.0, 1.1)),
         line([-5.8, 10.0, -321.0], -20.0, 0.0, 0.0, tr, 0.62, drop, shot(6.0, 44.0, 1.1)),
         // 16-18 Pre-chorus 2: the eyes drop to the town. Heavy.
-        line([0.0, -4.0, -362.0], 0.0, -55.0, 0.0, h, 0.9, fall, shot(6.4, 46.0, 0.5)),
+        line([0.0, -4.0, -362.0], 0.0, -55.0, 0.0, h, 0.9, drop, shot(6.4, 46.0, 0.5)),
         line([-2.0, -5.0, -374.0], 0.0, -55.0, 6.0, h, 0.78, drop, shot(5.8, 44.0, 0.8)),
         line([1.0, -6.0, -386.0], 0.0, -55.0, 0.0, h, 1.0, drop, shot(6.4, 44.0, 0.8)),
-        // 19-24 Chorus 2: the same shots backwards.
-        line([0.0, 2.0, -398.0], 180.0, 0.0, 0.0, Flow::PunchBack, 1.35, drop, shot(6.6, 50.0, 0.0)),
-        line([-1.5, 2.5, -420.0], 180.0, 0.0, 0.0, Flow::PunchBack, 1.35, drop, shot(6.6, 50.0, 0.7)),
-        line([1.0, 1.5, -444.0], 180.0, 0.0, 6.0, h, 1.1, slam, shot(5.6, 48.0, 0.7)),
-        line([-0.5, 2.0, -458.0], 180.0, 0.0, 0.0, h, 0.82, drop, shot(5.6, 48.0, 0.9)),
-        line([1.5, 2.5, -472.0], 180.0, 0.0, -5.0, h, 0.85, drop, shot(5.6, 48.0, 0.8)),
-        line([0.0, 2.0, -486.0], 180.0, 0.0, 0.0, h, 0.9, drop, shot(5.6, 48.0, 0.7)),
-        // 25-30 Bridge: still looking back, drifting away slowly.
-        line([2.4, 3.0, -500.0], 172.0, 0.0, 0.0, h, 0.6, rise, shot(6.4, 40.0, 1.4)),
-        line([-2.0, 1.2, -512.0], 190.0, 0.0, 0.0, h, 1.05, rise, shot(6.0, 44.0, 1.2)),
-        line([1.0, 2.4, -524.0], 176.0, 0.0, 0.0, h, 0.8, rise, shot(6.0, 42.0, 1.2)),
-        line([-2.4, 3.0, -536.0], 188.0, 0.0, 0.0, h, 0.6, rise, shot(6.4, 40.0, 1.6)),
-        line([2.0, 1.2, -548.0], 170.0, 0.0, 0.0, h, 1.05, rise, shot(6.0, 44.0, 1.2)),
-        line([-1.0, 2.4, -560.0], 184.0, 0.0, 0.0, h, 0.8, rise, shot(6.0, 42.0, 1.2)),
-        // 31-33 Breakdown: turn to face the wish star and run at it.
+        // 19-24 Chorus 2.
+        line([0.0, 2.0, -398.0], 0.0, 0.0, 0.0, Flow::Punch, 1.35, drop, shot(6.6, 50.0, 0.0)),
+        line([-1.5, 2.5, -420.0], 0.0, 0.0, 0.0, Flow::Punch, 1.35, drop, shot(6.6, 50.0, 0.7)),
+        line([1.0, 1.5, -444.0], 0.0, 0.0, 6.0, h, 1.1, slam, shot(5.6, 48.0, 0.7)),
+        line([-0.5, 2.0, -458.0], 0.0, 0.0, 0.0, h, 0.82, drop, shot(5.6, 48.0, 0.9)),
+        line([1.5, 2.5, -472.0], 0.0, 0.0, -5.0, h, 0.85, drop, shot(5.6, 48.0, 0.8)),
+        line([0.0, 2.0, -486.0], 0.0, 0.0, 0.0, h, 0.9, drop, shot(5.6, 48.0, 0.7)),
+        // 25-30 Bridge.
+        line([2.4, 3.0, -500.0], -8.0, 0.0, 0.0, h, 0.6, rise, shot(6.4, 40.0, 1.4)),
+        line([-2.0, 1.2, -512.0], 10.0, 0.0, 0.0, h, 1.05, rise, shot(6.0, 44.0, 1.2)),
+        line([1.0, 2.4, -524.0], -4.0, 0.0, 0.0, h, 0.8, rise, shot(6.0, 42.0, 1.2)),
+        line([-2.4, 3.0, -536.0], 8.0, 0.0, 0.0, h, 0.6, rise, shot(6.4, 40.0, 1.6)),
+        line([2.0, 1.2, -548.0], -10.0, 0.0, 0.0, h, 1.05, rise, shot(6.0, 44.0, 1.2)),
+        line([-1.0, 2.4, -560.0], 4.0, 0.0, 0.0, h, 0.8, rise, shot(6.0, 42.0, 1.2)),
+        // 31-33 Breakdown: a run at the wish star.
         line([0.0, 1.0, -584.0], 0.0, 0.0, 0.0, tr, 0.55, drop, shot(6.4, 38.0, 1.8)),
         line([0.6, 1.2, -614.0], -8.0, 0.0, 0.0, tr, 0.6, drop, shot(6.2, 40.0, 1.0)),
         line([4.2, 1.6, -645.0], -8.0, 0.0, 0.0, h, 1.2, slam, shot(7.4, 44.0, 0.8)),
@@ -512,6 +509,8 @@ pub struct World {
     lines: Vec<LineInst>,
     /// Shock rings: (time, strength).
     ripples: Vec<(f32, f32)>,
+    /// メロディア's staff: (group, rest position, from, to).
+    staffs: Vec<(NodeId, Vec3, f32, f32, f32, Vec<(NodeId, f32, f32)>)>,
     dust: Vec<(Vec3, f32, f32, f32)>,
 }
 
@@ -565,6 +564,18 @@ pub struct Frame3d {
     pub star_amt: f32,
     pub iris: f32,
     pub voice: f32,
+    pub beat: f32,
+    pub swell: f32,
+    pub snare: f32,
+    /// A dropped note: (screen x, seconds since, amount).
+    pub drop: Vec3,
+    /// The last two piano keys struck: (screen x, seconds since, amount).
+    pub keys: [Vec3; 2],
+    /// Ending: the staff of light, and the last two guitar picks on it: (line, seconds since, amount).
+    pub staff: f32,
+    pub picks: [Vec3; 2],
+    /// Vocal echo: (seconds since, amount).
+    pub echo: (f32, f32),
 }
 
 /// YOASOBI-style bursts: a red noise frame, then an inverted frame (2 frames each).
@@ -612,6 +623,46 @@ fn pose_echo(ts: &mut Scene, p: NodeId, g: &GlyphInst, t: f32, opacity: f32) {
 
 fn window_f(t: f32, a: f32, b: f32, fade: f32) -> f32 {
     crate::graphics::window(t, a, b, fade)
+}
+
+/// Flight: where the song builds, the picture accelerates, then eases out of it over 1.6 s.
+/// (from, to, strength)
+const WARPS: &[(f32, f32, f32)] = &[
+    (73.2, 75.9, 0.5), (87.6, 90.1, 0.8), (138.3, 144.5, 1.0), (156.0, 158.5, 0.5), (210.2, 219.15, 1.0), (231.9, 235.2, 0.6),
+];
+
+fn warp(t: f32) -> f32 {
+    WARPS
+        .iter()
+        .map(|&(a, b, k)| if t < a { 0.0 } else if t < b { k * ((t - a) / (b - a)).powf(1.6) } else { k * (1.0 - smooth5(clamp01((t - b) / 1.6))) })
+        .fold(0.0, f32::max)
+}
+
+/// How far the flight has carried the dust by `t` (the integral of `warp`, in metres).
+fn warp_travel(t: f32) -> f32 {
+    WARPS.iter().map(|&(a, b, k)| k * 70.0 * (b - a) * clamp01((t - a) / (b - a)).powf(2.6) / 2.6).sum()
+}
+
+/// Which phrase of 鉛のようなこの足を睨んで君を待つ a word belongs to, by when it is sung.
+fn lead_row(word_start: f32) -> usize {
+    if word_start < 128.9 {
+        0
+    } else if word_start < 132.4 {
+        1
+    } else {
+        2
+    }
+}
+
+/// Beat pulse in the choruses: 1 on a downbeat, less on beats 2 and 3, decaying.
+fn beat_pulse(t: f32) -> f32 {
+    let in_chorus = (t >= CHORUS_1 && t < 88.0 && !(TIME_STOP.0..TIME_STOP.1).contains(&t)) || (t >= CHORUS_2 && t < 172.0) || (t >= FINAL && t < 246.0);
+    if !in_chorus {
+        return 0.0;
+    }
+    let n = (t - DOWNBEAT_0) / BEAT;
+    let k = if (n.floor() as i32).rem_euclid(3) == 0 { 1.0 } else { 0.4 };
+    k * (-(n.fract() * BEAT) / 0.16).exp()
 }
 
 /// 0 → 1 as the camera falls into 笑顔で言う and through the tunnel (accelerating).
@@ -702,13 +753,11 @@ impl World {
             let (in_t, out_t) = match (lrc, next_start) {
                 (None, _) => (first - 0.2, 29.2),
                 // Punch lines clear the way for the next one.
-                (Some(6 | 7), Some(n)) => (first - 0.4, n - 0.2),
-                // Flying backwards, the line we left stays dead ahead: it has to go before the next one speaks.
-                (Some(19..=29), Some(n)) => (first - 0.4, n - 0.35),
+                (Some(6 | 7 | 19 | 20), Some(n)) => (first - 0.4, n - 0.2),
                 (_, Some(n)) if faces_away => (first - 0.4, n - 1.2),
                 (Some(3), Some(n)) => (first - 0.4, n - 0.25),
                 (Some(8), _) => (first - 0.4, 75.7),
-                (Some(11), _) => (first - 0.4, 89.5),
+                (Some(11), _) => (first - 0.4, 90.1),
                 (Some(21), _) => (first - 0.4, 158.25),
                 (_, Some(n)) => (first - 0.4, n + 2.0),
                 _ => (first - 0.4, line.end() + 4.0),
@@ -878,39 +927,6 @@ impl World {
                         ch: *ch,
                         slam: *slam || (spec.entrance == Entrance::Slam && nth == 0 && *wi == 0),
                     });
-                    // A held note: the letter breathes out copies of itself for as long as it lasts.
-                    if let Some(hd) = HOLDS.iter().find(|hd| hd.0 == li && hd.1 == *ch && word.start >= hd.2) {
-                        let count = ((hd.4 - hd.3) / 0.22).ceil() as u8;
-                        for n in 0..count {
-                            let e = text_scene.add_to(
-                                group,
-                                Node::mesh(geo.clone(), Material::unlit(glyph_color).transparent().opacity(0.0))
-                                    .with_position(base)
-                                    .scaled(s)
-                                    .hidden(),
-                            );
-                            let at = hd.3 + (hd.4 - hd.3) * n as f32 / count as f32;
-                            glyphs.push(GlyphInst {
-                                kind: Kind::Ghost(n),
-                                plate: None,
-                                tilt: 0.0,
-                                scatter: Vec3::ZERO,
-                                node: e,
-                                line: li,
-                                appear: at,
-                                word_start: at,
-                                word_end: hd.4,
-                                base,
-                                color: glyph_color,
-                                plate_color: *color,
-                                cluster: None,
-                                accent: None,
-                                width: adv * s,
-                                ch: ' ',
-                                slam: false,
-                            });
-                        }
-                    }
                     // 何度も繰り返し: receding copies.
                     if lrc.is_some_and(|i| ECHO.contains(&i)) {
                         for n in 1..=4u8 {
@@ -997,11 +1013,47 @@ impl World {
             line_insts.push(LineInst { arrivals: Vec::new(), group, spec: *spec, in_t, out_t, start: first, end: line.end(), words });
         }
 
-        let mut ripples: Vec<(f32, f32)> = vec![(TIME_STOP.1, 1.0), (BAND_BACK, 0.6), (FINAL, 1.0)];
-        for i in [6, 7, 19, 20] {
-            if let Some(l) = lines.get(i) {
-                ripples.extend(l.words.iter().map(|w| (w.start, if w.text == "鉄" { 1.0 } else { 0.5 })));
+        // Shock rings: on the beat through the choruses (strong on the downbeat), and on a few
+        // single hits.
+        let mut ripples: Vec<(f32, f32)> = vec![(TIME_STOP.1, 1.0), (90.1, 0.8), (BAND_BACK, 0.6), (174.17, 0.8), (188.57, 0.8)];
+        for (a, b) in [(CHORUS_1, 88.0), (CHORUS_2, 172.0), (FINAL, 246.0)] {
+            let mut n = ((a - DOWNBEAT_0) / BEAT).round() as i32;
+            while DOWNBEAT_0 + n as f32 * BEAT < b {
+                let at = DOWNBEAT_0 + n as f32 * BEAT;
+                if !(TIME_STOP.0 - 0.5..TIME_STOP.1 + 0.5).contains(&at) {
+                    ripples.push((at, if n.rem_euclid(3) == 0 { 1.0 } else { 0.3 }));
+                }
+                n += 1;
             }
+        }
+        // メロディア: a staff runs behind the word and the notes slide along it, like reading the score.
+        let mut staffs = Vec::new();
+        for (li, t0, t1) in [(8usize, 68.5_f32, 70.2_f32), (21, 151.3, 153.0)] {
+            let Some(l) = line_insts.get(li) else { continue };
+            let size = l.spec.size;
+            let base = Vec3::new(0.0, 0.0, -2.0 * PUNCH_D - 0.6);
+            let g = text_scene.add_to(l.group, Node::group().with_position(base).hidden());
+            let mat = || Material::unlit(Rgb::hex(TEXT)).transparent().opacity(0.0);
+            // Everything on the staff rides one wave: (node, x, rest y).
+            let mut parts = Vec::new();
+            for k in 0..5 {
+                let y = (k as f32 - 2.0) * 0.36 * size;
+                for sgm in 0..150 {
+                    let x = -45.0 + sgm as f32 * 0.6;
+                    parts.push((text_scene.add_to(g, Node::mesh(Geometry::cuboid(0.66, 0.02, 0.01), mat()).at(x, y, 0.0)), x, y));
+                }
+            }
+            for n in 0..30u32 {
+                let x = -28.0 + n as f32 * 2.1 + hash3(n, 5) * 0.9;
+                let y = ((hash3(n, li as u32) * 9.0).floor() - 4.0) * 0.18 * size;
+                let head = text_scene.add_to(g, Node::mesh(Geometry::circle(0.17 * size, 20), mat()).at(x, y, 0.0).with_rotation(Quat::from_rotation_z(0.4)));
+                text_scene[head].scale = Vec3::new(1.3, 0.85, 1.0);
+                parts.push((head, x, y));
+                let up = if y < 0.0 { 1.0 } else { -1.0 };
+                let stem = text_scene.add_to(g, Node::mesh(Geometry::cuboid(0.03, 1.1 * size, 0.01), mat()).at(x + up * 0.2 * size, y + up * 0.55 * size, 0.0));
+                parts.push((stem, x, y + up * 0.55 * size));
+            }
+            staffs.push((g, base, t0, t1, size, parts));
         }
         ripples.sort_by(|a, b| a.0.total_cmp(&b.0));
         let hash = |i: u32, s: u32| -> f32 {
@@ -1033,6 +1085,7 @@ impl World {
             glyphs,
             lines: line_insts,
             ripples,
+            staffs,
             dust,
         }
     }
@@ -1041,21 +1094,15 @@ impl World {
     /// smoothed average of the word centres around `t`) from in front of the station.
     fn line_pose(&self, i: usize, t: f32) -> CamPose {
         if i == 13 {
-            // 向こうへと向かうんだ: we came through the last だ and keep going, slower and slower.
-            // The line hangs far ahead on the same course and we never catch it.
-            if t < 89.6 {
-                return self.line_pose(12, t);
-            }
-            let st = self.lines[12].spec.station;
-            let fwd = -(st.rot * Vec3::Z);
-            let p0 = self.line_pose(12, 89.6);
-            let s = t - 89.6;
-            let pos = p0.pos + fwd * 9.0 * (1.0 - (-s / 3.0).exp());
-            let k = (-s / 0.9).exp();
-            return CamPose { pos, look: pos + fwd * 30.0, fov: 46.0 + (p0.fov - 46.0) * k, up: (st.rot * Vec3::Y).lerp(p0.up, k).normalize() };
+            // 向こうへと向かうんだ: the rush cuts to stillness. The words stand huge and far off,
+            // seen from below and to one side, and the camera drifts slowly round them.
+            let st = self.lines[13].spec.station;
+            let s = (t - 90.1).max(0.0);
+            let th = -0.62 + 0.9 * (1.0 - (-s / 9.0).exp());
+            let r = 30.0 + 1.2 * s;
+            let pos = st.pos + Vec3::new(th.sin() * r, -5.0 + 0.2 * s, th.cos() * r);
+            return CamPose { pos, look: st.pos + Vec3::new(0.0, 0.6, 0.0), fov: 44.0, up: Vec3::Y };
         }
-        // 届くはずのない願いを君は: the camera holds perfectly still while time stops.
-        let t = if i == 10 && t < TIME_STOP.1 { t.min(TIME_STOP.0 + 0.4) } else { t };
         let line = &self.lines[i];
         let spec = &line.spec;
         let tc = t.clamp(line.start - 0.3, line.end + 0.6);
@@ -1073,20 +1120,21 @@ impl World {
         let target = if i == 10 { centre } else if punch { acc / wsum } else { (acc / wsum).lerp(centre, 0.25) };
         // While a note is held the letter grows: stay on the whole line and give it room.
         let held = HOLDS.iter().filter(|h| h.0 == i).map(|h| ease_between(t, h.3, h.4) * (1.0 - ease_between(t, h.4, h.4 + 0.8))).fold(0.0_f32, f32::max);
-        let target = target.lerp(centre, 0.4 * held);
+        let held = if i >= 38 { 0.0 } else { held };
+        let target = target.lerp(centre, 0.6 * held);
 
         // Slow push while the line is sung.
         let u = clamp01((t - line.start) / (line.end - line.start + 1.0).max(1.0));
-        let mut dist = spec.shot.dist * (1.0 - 0.14 * u) * (1.0 + 0.12 * held);
+        let mut dist = spec.shot.dist * (1.0 - 0.14 * u) * (1.0 - 0.2 * held);
         if i == 3 {
             dist *= 1.0 - 0.3 * ease_out((t - 43.68) / 0.35); // 起きる: snap in
         }
         if i == 9 {
             // The last く of 寂しく: drag the camera out of the situation, hard.
-            dist *= 1.0 + 0.4 * ease_between(t, 73.2, 75.4);
+            dist *= 1.0;
         }
         if i == 22 {
-            dist *= 1.0 + 0.4 * ease_between(t, 156.0, 158.0);
+            dist *= 1.0;
         }
         // 迎えるんだ: the camera backs away, receiving rather than going.
         if i == 25 {
@@ -1094,7 +1142,7 @@ impl World {
         }
         if i == 19 {
             // 見てーみたかーった: back off a little on the first held note, then far and fast on the long one.
-            dist *= 1.0 + 0.15 * ease_between(t, 138.3, 139.9) + 1.1 * ease_in((t - 140.3) / 3.9);
+            dist *= 1.0 - 0.25 * ease_in((t - 140.3) / 4.1);
         }
         let off = Vec3::new(-spec.shot.ox, -spec.shot.oy, 0.0);
         let anchor = spec.station.world(target + off);
@@ -1104,6 +1152,10 @@ impl World {
         let c = world_clock(t);
         let swing = Quat::from_axis_angle(up, 0.10 * (c * 0.21 + i as f32 * 1.7).sin())
             * Quat::from_axis_angle(spec.station.rot * Vec3::X, 0.05 * (c * 0.17 + i as f32).sin());
+        // Held notes: the camera pushes in and swings out to the side while the lens widens,
+        // so the words hold their size and the space behind them stretches away.
+        let side = if i % 2 == 0 { 1.0 } else { -1.0 };
+        let swing = Quat::from_axis_angle(up, 0.42 * held * side) * Quat::from_axis_angle(spec.station.rot * Vec3::X, -0.12 * held) * swing;
         let normal = if i == 12 { face } else { swing * face };
         if i == 19 {
             // ...and the horizon turns under it the whole time.
@@ -1111,6 +1163,19 @@ impl World {
         }
         let mut fov = spec.shot.fov;
         let mut look = anchor;
+        fov += 11.0 * held;
+        // 置いて: we are the one leaving. The camera lifts away and the words stay where they are,
+        // smaller and smaller.
+        if i == 38 {
+            let x = ease_in((t - 241.0) / 4.4);
+            dist *= 1.0 + 4.0 * x;
+            up = Quat::from_axis_angle(face, 0.3 * x) * up;
+        }
+        if i == 39 {
+            let x = smooth5(clamp01((t - 248.2) / 8.5));
+            dist *= 1.0 + 10.0 * x;
+            up = Quat::from_axis_angle(face, -0.5 * x) * up;
+        }
         if (32..=34).contains(&i) {
             fov += 14.0 * ease_in((t - 202.0) / 17.0);
         }
@@ -1146,7 +1211,7 @@ impl World {
         // The last だ of 抱えて向かうんだ: rush forward through it.
         if i == 12 {
             // Builds over the whole held note, then plunges through the letter.
-            let x = clamp01((t - 87.85) / 1.75);
+            let x = clamp01((t - 87.85) / 2.25);
             let rush = x * x * (0.35 + 0.65 * x);
             dist -= 11.0 * rush;
             fov += 38.0 * rush;
@@ -1277,6 +1342,17 @@ impl World {
             pose.look += shake * 0.05 * hit;
         }
         pose.fov -= 3.0 * impact(t, 0.3).min(1.0);
+        // Flight: the lens opens and the frame starts to tremble as it builds.
+        let w = warp(t);
+        if w > 0.0 {
+            let n = |s: f32| ((t * 47.0 + s).sin() * 43758.545).fract() - 0.5;
+            let cam = pose.camera();
+            let shake = (cam.forward().cross(cam.up_vector()) * n(2.1) + cam.up_vector() * n(5.3)) * 0.05 * w * w;
+            pose.pos += shake;
+            pose.look += shake;
+            pose.fov += 15.0 * w;
+        }
+        pose.fov -= 1.8 * beat_pulse(t) + 0.7 * cue_pulse(SNARE, t, 0.12);
         pose
     }
 
@@ -1300,7 +1376,7 @@ impl World {
         // The light grows as we climb through 高く高く, then opens fully on 青い世界.
         let blue = (0.2 * ease_between(t, PRE_1 + 0.3, BLUE_WORLD - 0.3) + 0.5 * ease_between(t, BLUE_WORLD - 0.4, BLUE_WORLD + 1.2))
             * (1.0 - ease_between(t, 54.2, 60.0))
-            + 0.5 * ease_between(t, FINAL - 0.05, FINAL + 0.5) * (1.0 - ease_between(t, OITE - 1.5, OITE + 1.6));
+            ;
         // Bridge: a soft gem glow instead of rays.
         let gem = crate::graphics::mix(t).gem;
         let gem_color = Vec3::new(0.12, 0.62, 0.42).lerp(Vec3::new(0.48, 0.3, 0.8), ease_between(t, BRIDGE_MOON - 1.5, BRIDGE_MOON));
@@ -1315,11 +1391,12 @@ impl World {
         // again on 置いて.
         let sun_amt = 0.0_f32;
         // Dawn on the planet's limb through the last chorus; it closes again on 置いて.
-        let eclipse = ease_between(t, FINAL - 0.05, FINAL + 1.6) * (1.0 - ease_between(t, OITE - 1.0, OITE + 3.2));
+        let eclipse = 0.5 * ease_between(t, FINAL - 0.05, FINAL + 1.6) * (1.0 - ease_between(t, OITE - 1.0, OITE + 3.2));
         // The wish star grows through the breakdown and goes white on the hit; at the end one
         // star hangs where 君 went and answers each chime.
         let wish = (0.35 * ease_between(t, 202.5, 206.0) + 1.4 * ease_in((t - 208.0) / 11.2)) * (1.0 - ease_between(t, FINAL, FINAL + 0.4));
-        let chime: f32 = CHIMES.iter().filter(|c| **c <= t).map(|c| 0.7 * (-(t - c) / 1.3).exp()).sum();
+        let chime = 0.7 * cue_pulse(DROPS, t, 1.3) + 0.3 * cue_pulse(KEYS, t, 0.5);
+        let chime = if t > 250.0 { chime } else { 0.0 };
         let kimi = (0.75 * ease_between(t, 240.0, 262.0) + chime) * (1.0 - ease_between(t, END - 2.5, END - 0.5));
         let (star_dir, star_amt) = if t < 228.0 { (Vec3::new(0.04, 0.03, -1.0), wish) } else { (KIMI_DIR, kimi) };
         let iris = window_f(t, BRIDGE - 0.3, BRIDGE_MOON - 1.6, 1.2);
@@ -1348,7 +1425,7 @@ impl World {
         }
         let glow_k = clamp01(gw / 2.0);
         let glow_col = Vec3::new(0.46, 0.42, 0.66).lerp(gacc / gw.max(1e-3), glow_k);
-        let glow_amt = 0.55 + 0.75 * glow_k;
+        let glow_amt = 0.55 + 0.75 * glow_k + 0.35 * cue_pulse(CHORD, t, 0.3);
 
         let (ripple_since, ripple_amt) = self
             .ripples
@@ -1383,6 +1460,36 @@ impl World {
         }
         let mut debris: Vec<Particle> = Vec::new();
         let cam_now = self.camera_at(t);
+        let cam_fwd_now = (cam_now.look - cam_now.pos).normalize_or_zero();
+        // Where each phrase of 鉛のような… sits in the laid-out line, so each can be brought to the centre.
+        let mut lead_rows = [0.0_f32; 3];
+        for (ri, row_y) in lead_rows.iter_mut().enumerate() {
+            let ys: Vec<f32> = self.glyphs.iter().filter(|g| g.line == 17 && lead_row(g.word_start) == ri).map(|g| g.base.y).collect();
+            *row_y = ys.iter().sum::<f32>() / ys.len().max(1) as f32;
+        }
+        for (g, base, t0, t1, size, parts) in &self.staffs {
+            let op = window_f(t, *t0, *t1, 0.3) * 0.3;
+            ts[*g].visible = op > 0.003;
+            if ts[*g].visible {
+                let shift = -2.6 * (t - t0);
+                ts[*g].position = *base + Vec3::new(shift, 0.0, 0.0);
+                // The staff is a string the melody plays: two waves run along it, louder with the song.
+                let amp = size * (0.22 + 0.5 * audio.bins.get(9).copied().unwrap_or(0.3).min(1.0));
+                let wave = |x: f32| amp * (0.65 * (x * 0.42 - t * 5.2).sin() + 0.35 * (x * 0.17 + t * 2.9).sin());
+                for (n, x, y) in parts {
+                    let wx = x + shift;
+                    ts[*n].position.y = y + wave(wx);
+                    if (ts[*n].scale.x - 1.0).abs() < 0.01 && (y.abs() / (0.36 * size)).fract() < 0.01 {
+                        ts[*n].rotation = Quat::from_rotation_z(((wave(wx + 0.3) - wave(wx - 0.3)) / 0.6).atan());
+                    }
+                }
+                for d in ts.descendants(*g) {
+                    if let Some(m) = ts[d].material_mut() {
+                        m.opacity = op;
+                    }
+                }
+            }
+        }
         // 向こうへと向かうんだ recedes ahead of us.
         {
             let l = &self.lines[13];
@@ -1480,7 +1587,7 @@ impl World {
             let scl = expo_out((since - 0.04) / 0.75);
             let fade_in = expo_out(since / 0.22);
             // Exit: accelerate away (expo-in) instead of a plain fade.
-            let q = if g.line == last { ease_between(t, 254.0, 258.5) } else { expo_in((t - line.out_t) / 0.5) };
+            let q = if g.line == last { ease_between(t, 250.5, 253.4) } else { expo_in((t - line.out_t) / 0.5) };
             let mut opacity = (fade_in * (1.0 - q)).max(revive * pos);
             if let Kind::Echo(n) = g.kind {
                 opacity *= 0.5_f32.powi(n as i32) * 0.55;
@@ -1508,6 +1615,27 @@ impl World {
                 }
             };
             node.position = g.base + offset + drift;
+            if g.line < 38 {
+                // A held note: the letter-spacing opens for as long as the voice holds.
+                let open = HOLDS.iter().filter(|h| h.0 == g.line).map(|h| ease_between(t, h.3, h.4)).fold(0.0_f32, f32::max);
+                node.position.x += g.base.x * 0.28 * open;
+            }
+            if g.line == 17 {
+                // 鉛のようなこの足を睨んで君を待つ: one phrase at a time, alone in the frame. Each
+                // sinks slowly while it is sung, heavy as lead, and drops away when the next
+                // begins. 君を待つ does not sink: it waits, and its letters drift apart.
+                let ri = lead_row(g.word_start);
+                let (a, b) = [(126.77, 129.0), (129.0, 132.46), (132.46, 134.6)][ri];
+                let size = line.spec.size;
+                let gone = (t - b + 0.3).max(0.0);
+                node.position.y = g.base.y - lead_rows[ri] + drift.y;
+                if ri < 2 {
+                    node.position.y += 0.45 * size - 0.24 * size * (t - a).max(0.0) - 5.0 * size * gone * gone;
+                    opacity *= 1.0 - clamp01(gone / 0.28);
+                } else {
+                    node.position.x += g.base.x * 0.4 * ease_between(t, 132.46, 134.4);
+                }
+            }
             if let Kind::Echo(n) = g.kind {
                 // The echoes spread back from the word after it lands.
                 node.position.z -= 0.9 * n as f32 * ease_out(since / 1.6);
@@ -1525,11 +1653,6 @@ impl World {
                 }
             }
             if matches!(line.spec.flow, Flow::Punch | Flow::PunchBack) {
-                if "メロディア".contains(g.ch) {
-                    // メロディア rides the song's spectrum like a waveform.
-                    let bin = audio.bins.get((g.node.0 as usize * 7) % 32).copied().unwrap_or(0.5);
-                    node.position.y += 0.4 * line.spec.size * (bin - 0.5).clamp(-0.5, 0.7);
-                }
             }
             // 笑顔で言う: each letter is pulled into the singularity behind the line — it
             // stretches toward it, spirals and is swallowed.
@@ -1547,7 +1670,7 @@ impl World {
             // 抱えて向かうんだ: letters peel off past the camera once they've been sung.
             let last_da = g.line == 12 && g.word_start > 87.7;
             if last_da {
-                node.scale *= 1.0 + 1.6 * clamp01((t - 87.85) / 1.75).powi(2);
+                node.scale *= 1.0 + 1.6 * clamp01((t - 87.85) / 2.25).powi(2);
             }
             if line.spec.flow == Flow::Travel && !last_da {
                 let (far, dur) = if g.line == 12 { (3.5, 0.4) } else { (1.3, 1.2) };
@@ -1644,15 +1767,6 @@ impl World {
                 debris.push(Particle::new(p, size, Rgb::hex(0x9fc2ff) * (3.5 * tail * kimi_on)).opacity(tail * kimi_on));
             }
         }
-        // The one light that stayed, at the end.
-        let solo = ease_between(t, 256.0, 261.0) * (1.0 - ease_between(t, END - 3.5, END - 1.0));
-        if solo > 0.003 {
-            let cam = cam_now.camera();
-            let (f, u) = (cam.forward(), cam.up_vector());
-            let r = f.cross(u).normalize_or_zero();
-            let p = cam_now.pos + f * 9.0 - r * 2.2 + u * (-1.5 + 0.22 * (t * 0.6).sin());
-            debris.push(Particle::new(p, 0.13, Rgb::hex(0xffb8bd) * (3.0 * solo)).opacity(solo));
-        }
         if !debris.is_empty() {
             s.add(Node::particles(debris, Blending::Additive));
         }
@@ -1661,7 +1775,7 @@ impl World {
             .iter()
             .map(|(p, size, speed, op)| {
                 // The motes fill a box that travels with the camera, so we are always flying through them.
-                let raw = Vec3::new(p.x + 0.2 * (clock * 0.3 + p.z).sin(), p.y + clock * speed, p.z) - cam_now.pos;
+                let raw = Vec3::new(p.x + 0.2 * (clock * 0.3 + p.z).sin(), p.y + clock * speed, p.z) - cam_now.pos + cam_fwd_now * -warp_travel(t);
                 let wrap = |x: f32| (x + 20.0).rem_euclid(40.0) - 20.0;
                 Particle::new(cam_now.pos + Vec3::new(wrap(raw.x), wrap(raw.y), wrap(raw.z)), *size * 0.7, Rgb::hex(LILAC) * (0.35 * world + 0.06))
                     .opacity(*op * 0.6)
@@ -1705,7 +1819,7 @@ impl World {
             },
             red_frame: if BURSTS.iter().any(|b| (*b..b + 0.067).contains(&t)) { 1.0 } else { 0.0 },
             glitch: decay(GLITCHES, t, 0.1).min(1.2).max(0.55 * wormhole(t)) + 0.25 * window_f(t, KURUSHIKU, 74.3, 0.1),
-            speed: decay(SPEED_LINES, t, 0.5).min(1.0),
+            speed: warp(t),
             twirl: wormhole(t) * (1.0 - ease_between(t, CHORUS_1 - 0.04, CHORUS_1)),
             // Not `camera.right()`: that ignores roll, which sheared the sky on rolled shots.
             cam_right: camera.forward().cross(camera.up_vector()).normalize(),
@@ -1724,7 +1838,8 @@ impl World {
             stop: window_f(t, TIME_STOP.0 + 0.35, TIME_STOP.1 - 0.1, 0.25),
             flash: (-((t - CHORUS_1).max(0.0)) / 0.28).exp() * if t >= CHORUS_1 - 0.02 { 1.0 } else { 0.0 } * 0.9
                 + 0.45 * (-((t - TIME_STOP.1).max(0.0)) / 0.25).exp() * if t >= TIME_STOP.1 { 1.0 } else { 0.0 }
-                + 1.0 * (-((t - FINAL).max(0.0)) / 0.5).exp() * if t >= FINAL { 1.0 } else { 0.0 },
+                + 1.0 * (-((t - FINAL).max(0.0)) / 0.5).exp() * if t >= FINAL { 1.0 } else { 0.0 }
+                + 0.6 * (-((t - 90.1).max(0.0)) / 0.3).exp() * if t >= 90.1 { 1.0 } else { 0.0 },
             crt: 0.0,
             sun_dir: Vec3::new(0.0, -0.262, -0.965),
             sun_amt,
@@ -1741,6 +1856,32 @@ impl World {
             star_amt,
             iris,
             voice,
+            beat: beat_pulse(t),
+            swell: cue_swell(WHEEZE, t, 0.12, 0.75).min(1.6),
+            snare: cue_pulse(SNARE, t, 0.14).min(1.2),
+            staff: ease_between(t, 253.4, 254.3) * (1.0 - ease_between(t, 268.5, 271.8)),
+            picks: {
+                // Each pick plucks one of the five lines; the line wanders like a melody would.
+                let n = GUITAR.iter().filter(|g| **g <= t).count();
+                let pick = |back: usize| {
+                    if n <= back {
+                        return Vec3::ZERO;
+                    }
+                    let k = n - 1 - back;
+                    let line = ((k as f32 * 0.9).sin() * 1.6 + (k as f32 * 2.3).sin() * 0.9 + 2.0).round().clamp(0.0, 4.0);
+                    Vec3::new(line, t - GUITAR[k], (-(t - GUITAR[k]) / 0.9).exp())
+                };
+                [pick(0), pick(1)]
+            },
+            drop: DROPS.iter().enumerate().rev().find(|(_, d)| **d <= t).map_or(Vec3::ZERO, |(k, d)| Vec3::new(0.3 + 0.4 * hash3(k as u32, 31), t - d, (-(t - d) / 1.5).exp())),
+            keys: {
+                // Chords strike wide and bright, single keys softer; each lands on its own key.
+                let mut struck: Vec<(f32, f32)> = CHORD.iter().map(|c| (*c, 1.0)).chain(KEYS.iter().map(|c| (*c, 0.55))).filter(|(c, _)| *c <= t && t - *c < 5.0).collect();
+                struck.sort_by(|a, b| b.0.total_cmp(&a.0));
+                let key = |n: usize| struck.get(n).map_or(Vec3::ZERO, |&(c, k)| Vec3::new(0.08 + 0.84 * (c * 7.31).fract(), t - c, k * (-(t - c) / 0.7).exp()));
+                [key(0), key(1)]
+            },
+            echo: VOCAL_ECHO.iter().rev().find(|c| **c <= t).map_or((9.0, 0.0), |c| (t - c, (-(t - c) / 0.55).exp())),
             ripple_amt,
         }
     }
