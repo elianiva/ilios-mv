@@ -136,13 +136,12 @@ pub fn spring(s: f32) -> f32 {
     1.0 - (-zeta * omega * s).exp() * ((wd * s).cos() + zeta * omega / wd * (wd * s).sin())
 }
 
-/// Camera whip over a window that runs past the landing: a quick acceleration, then one
-/// long exponential glide (no dead stop). Velocity is continuous at the join.
+/// Camera move over a window that runs past the landing. It starts from rest, runs about 6%
+/// past the target and eases back onto it, so it never stops dead.
 pub fn whip(x: f32) -> f32 {
-    // Starts from rest, is quickest a third of the way in and then glides for a long time.
     let x = clamp01(x);
-    let y = 1.0 - (1.0 - x) * (1.0 - x);
-    y * y * y * (y * (6.0 * y - 15.0) + 10.0)
+    let q = x * x * x * (x * (6.0 * x - 15.0) + 10.0);
+    q + 1.8 * q * q * (1.0 - q)
 }
 
 /// After the camera lands on a line it keeps gliding into it for this long.

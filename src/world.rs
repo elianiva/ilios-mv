@@ -1225,9 +1225,15 @@ impl World {
         let held = if i >= 38 { 0.0 } else { held };
         let target = target.lerp(centre, 0.6 * held);
 
-        // Slow push while the line is sung.
-        let u = clamp01((t - line.start) / (line.end - line.start + 1.0).max(1.0));
+        // Slow push while the line is sung. It does not stop at the end of the line: it keeps
+        // going at the same speed and only then decays, so the shot drifts on.
+        let span = (line.end - line.start + 1.0).max(1.0);
+        let raw = (t - line.start) / span;
+        let u = if raw <= 1.0 { raw.max(0.0) } else { 1.0 + 2.5 / span * (1.0 - (-(raw - 1.0) * span / 2.5).exp()) };
         let mut dist = spec.shot.dist * (1.0 - 0.14 * u) * (1.0 - 0.2 * held);
+        // Once the last word is sung the camera drifts on toward the words, slowing, so it
+        // is still moving when the next move takes it.
+        dist -= 1.6 * (1.0 - (-(t - line.end).max(0.0) / 2.0).exp());
         if i == 3 {
             dist *= 1.0 - 0.3 * ease_out((t - 43.68) / 0.35); // 起きる: snap in
         }
@@ -1465,11 +1471,11 @@ impl World {
                 }
                 // Never leave a line before its last word has been sung, or while a note is held.
                 let prev = &self.lines[j - 1];
-                let w = if matches!(self.lines[j].spec.flow, Flow::Punch | Flow::PunchBack) { 0.45 } else { w };
+                let w = if matches!(self.lines[j].spec.flow, Flow::Punch | Flow::PunchBack) { 0.8 } else { w };
                 let hold_end = HOLDS.iter().filter(|h| h.0 == j - 1).map(|h| h.4).fold(0.0_f32, f32::max);
                 let earliest = prev.words.last().map_or(0.0, |w| w.0).max(hold_end - 0.3);
                 let start = (land - w).max(earliest).min(land - 0.3);
-                (w, start, ((land - start) / 0.5).clamp(1.2, 5.0))
+                (w, start, ((land - start) / 0.5).clamp(2.0, 5.0))
             };
             let mut pose = self.held_pose(i, t);
             if i > 1 {
