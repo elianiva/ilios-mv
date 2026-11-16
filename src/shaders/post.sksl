@@ -15,6 +15,7 @@ uniform float uInvert;   // 1 on an inverted frame
 uniform float uRedFrame; // 1 on a red noise frame
 uniform float uGlitch;   // block glitch amount
 uniform float uSpeed;    // flight: the whole picture is pulled down a tunnel, 0..1
+uniform float uSpeedDir; // 1 flying forward, -1 flying backwards (the streaks run inward)
 uniform float uTwirl;    // wormhole: 0..1
 uniform float uBass;     // low band 0..1
 uniform float3 uCamR;    // camera basis, for the sky
@@ -590,10 +591,13 @@ half4 main(float2 p0) {
         float lid = floor(sang / 6.28318 * lanes);
         float lh = hash(float2(lid, 3.0));
         float lf = fract(sang / 6.28318 * lanes) - 0.5;
-        float z = fract(lh * 7.3 + iTime * (0.9 + 2.6 * uSpeed) * (0.5 + lh));
+        float z = fract(lh * 7.3 + uSpeedDir * iTime * (0.9 + 2.6 * uSpeed) * (0.5 + lh));
         float head = z * z * 1.5;
         float len = 0.03 + 0.42 * uSpeed * z;
-        float seg = smoothstep(head - len, head, rw2) * smoothstep(head + 0.012, head, rw2);
+        // Backwards the streaks run in toward the vanishing point, their tails behind them.
+        float seg = uSpeedDir > 0.0
+            ? smoothstep(head - len, head, rw2) * smoothstep(head + 0.012, head, rw2)
+            : smoothstep(head + len, head, rw2) * smoothstep(head - 0.012, head, rw2);
         float on = step(0.45, hash(float2(lid, 9.0)));
         col += mix(float3(0.55, 0.66, 1.0), float3(1.0), z * 0.6) * seg * exp(-lf * lf * 26.0) * on * z * uSpeed * 1.5;
         col *= 1.0 - 0.35 * uSpeed * smoothstep(0.5, 1.1, rw2);

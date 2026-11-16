@@ -296,10 +296,11 @@ fn specs() -> Vec<LineSpec> {
         line([0.0, 3.0, -666.0], 0.0, -6.0, 0.0, h, 0.72, slam, shot(6.8, 50.0, 0.45)),
         line([-3.0, 4.5, -678.0], 10.0, -6.0, 0.0, h, 0.85, drop, shot(6.0, 48.0, 0.8)),
         line([2.0, 6.0, -690.0], -6.0, -4.0, 0.0, h, 1.0, rise, shot(6.6, 50.0, 0.8)),
-        line([0.0, 2.0, -702.0], 0.0, -30.0, 0.0, h, 0.8, drop, shot(6.6, 46.0, 1.2)),
+        // Behind 君は行ってしまう, toward us: the camera backs away from where 君 went.
+        line([0.0, 4.0, -676.0], 0.0, -30.0, 0.0, h, 0.8, drop, shot(6.6, 46.0, 1.2)),
         // The second 僕を置いて hangs on the same axis as the first, LAST_GAP nearer to us: the
         // camera never turns back for it, it appears in front of the camera as that keeps leaving.
-        line([0.0, 2.0 + 0.5 * LAST_GAP, -702.0 + 0.866 * LAST_GAP], 0.0, -30.0, 0.0, h, 0.5, drop, shot(5.8, 42.0, 1.4)),
+        line([0.0, 4.0 + 0.5 * LAST_GAP, -676.0 + 0.866 * LAST_GAP], 0.0, -30.0, 0.0, h, 0.5, drop, shot(5.8, 42.0, 1.4)),
     ];
     out[24].exit = -1.0;
     out[36].exit = 1.0;
@@ -551,6 +552,8 @@ pub struct Frame3d {
     pub red_frame: f32,
     pub glitch: f32,
     pub speed: f32,
+    /// 1 when the flight goes forward, -1 when it goes backwards.
+    pub speed_dir: f32,
     /// 0..1: the wormhole twist under 笑顔で言う.
     pub twirl: f32,
     /// Camera basis for the sky in the shader.
@@ -719,14 +722,21 @@ fn window_f(t: f32, a: f32, b: f32, fade: f32) -> f32 {
 /// Flight: where the song builds, the picture accelerates, then eases out of it over 1.6 s.
 /// (from, to, strength)
 const WARPS: &[(f32, f32, f32)] = &[
-    (73.2, 75.9, 0.5), (87.6, 90.1, 0.8), (138.3, 144.5, 1.0), (156.0, 158.5, 0.5), (210.2, 219.15, 1.0), (231.9, 235.2, 0.6),
+    (73.2, 75.9, 0.5), (87.6, 90.1, 0.8), (138.3, 144.5, 1.0), (156.0, 158.5, 0.5), (210.2, 219.15, 1.0),
+    // A negative amount flies backwards: leaving 君は行ってしまう for 君が大切な.
+    (232.4, 235.2, -0.6),
 ];
 
 fn warp(t: f32) -> f32 {
     WARPS
         .iter()
-        .map(|&(a, b, k)| if t < a { 0.0 } else if t < b { k * ((t - a) / (b - a)).powf(1.6) } else { k * (1.0 - smooth5(clamp01((t - b) / 1.6))) })
+        .map(|&(a, b, k)| if t < a { 0.0 } else if t < b { k.abs() * ((t - a) / (b - a)).powf(1.6) } else { k.abs() * (1.0 - smooth5(clamp01((t - b) / 1.6))) })
         .fold(0.0, f32::max)
+}
+
+/// 1 while the current flight goes forward, -1 while it goes backwards.
+fn warp_dir(t: f32) -> f32 {
+    WARPS.iter().rev().find(|w| t >= w.0).map_or(1.0, |w| w.2.signum())
 }
 
 /// How far the flight has carried the dust by `t` (the integral of `warp`, in metres).
@@ -1389,33 +1399,27 @@ impl World {
         pose
     }
 
-    /// 君's light in the last chorus. It rises out of 君 as the word is sung, hops along the line
-    /// to each word in time with the voice, like the ball over a sing-along lyric, and from the
-    /// last word it leaves toward the place the last star will be.
+    /// 君's light in the last chorus, 君's soul again. It rises out of 君 as the word is sung
+    /// and floats in front of the line, drifting and circling like the souls of the second
+    /// verse. From the last word it leaves toward the place the last star will be.
     fn kimi_light(&self, t: f32) -> Vec3 {
         let line = &self.lines[37];
-        let (st, size) = (line.spec.station, line.spec.size);
-        // (arrival, resting place): inside 君 first, then just above each later word.
-        let stops: Vec<(f32, Vec3)> = line
-            .words
-            .iter()
-            .enumerate()
-            .map(|(k, (mid, c))| (mid - 0.22, *c + Vec3::new(0.0, if k == 0 { 0.0 } else { 0.62 * size }, 0.4)))
-            .collect();
-        let Some(&(last_at, last)) = stops.last() else { return st.world(Vec3::ZERO) };
-        let mut p = stops[0].1;
-        for pair in stops.windows(2) {
-            let ((_, from), (at, to)) = (pair[0], pair[1]);
-            let hop = (at - pair[0].0).clamp(0.05, 0.42);
-            let u = clamp01((t - (at - hop)) / hop);
-            if u > 0.0 {
-                p = from.lerp(to, smooth5(u)) + Vec3::Y * 0.4 * size * (u * PI).sin();
-            }
-        }
-        if std::env::var_os("ILIOS_CAM_DEBUG").is_some() && (t - 230.0).abs() < 0.02 {
-            eprintln!("KIMI stops={:?}", stops);
-        }
-        let _ = last;
+        let st = line.spec.station;
+        let Some(&(born_at, kimi)) = line.words.first() else { return st.world(Vec3::ZERO) };
+        let last_at = line.words.last().map_or(born_at, |w| w.0);
+        let centre = line.words.iter().map(|w| w.1).sum::<Vec3>() / line.words.len() as f32;
+        // Station space: x across the line, y up, z toward the camera.
+        let w = world_clock(t);
+        let th = 1.7 * w + 0.5 * (0.6 * w).sin();
+        let size = line.spec.size;
+        let wander = centre
+            + Vec3::new(
+                size * (1.8 * (0.43 * w).sin() + 0.35 * th.cos()),
+                size * (0.9 + 0.45 * (0.57 * w + 1.0).sin() + 0.25 * th.sin()),
+                1.6 + 0.6 * (0.39 * w).sin(),
+            );
+        let rise = smooth5(clamp01((t - born_at + 0.2) / 1.2));
+        let p = kimi.lerp(wander, rise);
         st.world(p) + KIMI_DIR.normalize() * 600.0 * ease_in((t - last_at - 0.35) / 4.6)
     }
 
@@ -2135,7 +2139,11 @@ impl World {
             let path: Vec<Vec3> = (0..50u32).map(|k| self.kimi_light(t - k as f32 * 0.02)).collect();
             // It keeps its size on screen as it flies away, so it stays a light and not a dot.
             let far = (path[0] - cam_now.pos).length();
-            light_trail(&mut debris, &path, 0.018 * (6.0 + far * 0.5), Rgb::hex(0x7fb0ff), kimi_on);
+            let width = 0.014 * (6.0 + far * 0.5) * (1.0 + 0.1 * (t * 5.3).sin());
+            light_trail(&mut debris, &path, width, Rgb::hex(0x7fb0ff), kimi_on);
+            for (k, e) in [(2.4_f32, 0.6_f32), (4.5, 0.22), (8.0, 0.07)] {
+                debris.push(Particle::new(path[0], width * k, Rgb::hex(0x7fb0ff) * (e * kimi_on)).opacity((e * kimi_on).min(1.0)));
+            }
         }
         let mut asc = self.angel_scene.clone();
         let angel_amt = self.pose_angel(&mut asc, &mut debris, t, &cam_now);
@@ -2192,6 +2200,7 @@ impl World {
             red_frame: if BURSTS.iter().any(|b| (*b..b + 0.067).contains(&t)) { 1.0 } else { 0.0 },
             glitch: decay(GLITCHES, t, 0.1).min(1.2).max(0.55 * wormhole(t)) + 0.25 * window_f(t, KURUSHIKU, 74.3, 0.1),
             speed: warp(t),
+            speed_dir: warp_dir(t),
             twirl: wormhole(t) * (1.0 - ease_between(t, CHORUS_1 - 0.04, CHORUS_1)),
             // Not `camera.right()`: that ignores roll, which sheared the sky on rolled shots.
             cam_right: camera.forward().cross(camera.up_vector()).normalize(),

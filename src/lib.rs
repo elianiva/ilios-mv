@@ -296,6 +296,7 @@ impl Video for IliosVideo<'_> {
                 .float("uRedFrame", f.red_frame)
                 .float("uGlitch", f.glitch)
                 .float("uSpeed", f.speed)
+                .float("uSpeedDir", f.speed_dir)
                 .float("uTwirl", f.twirl)
                 .float("uBass", f.low)
                 .float3("uCamR", f.cam_right.x, f.cam_right.y, f.cam_right.z)
