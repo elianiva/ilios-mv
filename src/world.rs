@@ -1745,7 +1745,7 @@ impl World {
         // Dawn on the planet's limb through the last chorus; it closes again on 置いて.
         let eclipse = 0.5 * ease_between(t, FINAL - 0.05, FINAL + 1.6) * (1.0 - ease_between(t, OITE - 1.0, OITE + 3.2));
         // The wish star grows through the breakdown and goes white on the hit; at the end one
-        // star hangs where 君 went and answers each chime.
+        // star hangs where 君 went and answers each dropped note.
         // It answers the line: it rises out of the dark on 願い, blooms on 星 and keeps
         // twinkling, then the run at it builds it up to the hit.
         let hoshi = 205.35;
@@ -1756,7 +1756,7 @@ impl World {
             + 1.0 * ease_in((t - 209.0) / 10.2))
             * (1.0 + 0.07 * (t * 6.3).sin() * window_f(t, 205.5, 212.0, 1.0))
             * (1.0 - ease_between(t, FINAL, FINAL + 0.4));
-        let chime = 0.7 * cue_pulse(DROPS, t, 1.3) + 0.3 * cue_pulse(KEYS, t, 0.5);
+        let chime = 0.7 * cue_pulse(DROPS, t, 1.3);
         let chime = if t > 250.0 { chime } else { 0.0 };
         let kimi = (0.75 * ease_between(t, 240.0, 262.0) + chime) * (1.0 - ease_between(t, END - 2.5, END - 0.5));
         // In the run at it, the wish star slides onto the vanishing point: the streaks of the
