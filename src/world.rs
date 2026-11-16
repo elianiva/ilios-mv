@@ -80,6 +80,8 @@ const HOLDS: &[(usize, char, f32, f32, f32, f32)] = &[
     (38, 'て', 240.5, 241.0, 245.4, 3.0),
     (39, 'て', 247.5, 248.2, 254.5, 4.0),
 ];
+/// How far in front of the first 僕を置いて the second one hangs (metres, toward the camera).
+const LAST_GAP: f32 = 31.0;
 const HAND_R: f32 = 9.6;
 const HAND_Z: f32 = 2.6;
 fn hour_station(i: usize, clockwise: bool) -> Station {
@@ -287,7 +289,9 @@ fn specs() -> Vec<LineSpec> {
         line([-3.0, 4.5, -678.0], 10.0, -6.0, 0.0, h, 0.85, drop, shot(6.0, 48.0, 0.8)),
         line([2.0, 6.0, -690.0], -6.0, -4.0, 0.0, h, 1.0, rise, shot(6.6, 50.0, 0.8)),
         line([0.0, 2.0, -702.0], 0.0, -30.0, 0.0, h, 0.8, drop, shot(6.6, 46.0, 1.2)),
-        line([0.0, 0.4, -710.0], 0.0, -50.0, 0.0, h, 0.5, drop, shot(5.8, 42.0, 1.4)),
+        // The second 僕を置いて hangs on the same axis as the first, LAST_GAP nearer to us: the
+        // camera never turns back for it, it appears in front of the camera as that keeps leaving.
+        line([0.0, 2.0 + 0.5 * LAST_GAP, -702.0 + 0.866 * LAST_GAP], 0.0, -30.0, 0.0, h, 0.5, drop, shot(5.8, 42.0, 1.4)),
     ];
     out[24].exit = -1.0;
     out[36].exit = 1.0;
@@ -776,6 +780,8 @@ impl World {
                 (Some(8), _) => (first - 0.4, 75.7),
                 (Some(11), _) => (first - 0.4, 90.1),
                 (Some(21), _) => (first - 0.4, 158.25),
+                // The first 僕を置いて is gone before the second appears in front of it.
+                (Some(37), _) => (first - 0.4, 245.7),
                 (_, Some(n)) => (first - 0.4, n + 2.0),
                 _ => (first - 0.4, line.end() + 4.0),
             };
@@ -1167,8 +1173,14 @@ impl World {
             up = Quat::from_axis_angle(face, 0.3 * x) * up;
         }
         if i == 39 {
+            // One retreat, never forward: it carries on from where 置いて left the camera (the
+            // speed of that pull-away bleeds off, it does not stop), then the long pull back.
+            let end = 6.6 * 0.86 * 5.0;
+            let s = (t - 245.4).max(0.0);
             let x = smooth5(clamp01((t - 248.2) / 8.5));
-            dist *= 1.0 + 10.0 * x;
+            dist = end + 9.3 * (1.0 - (-s / 0.6).exp()) + 1.5 * s + 58.0 * x - LAST_GAP;
+            // Look down the axis, not at the line: early in the move the line is still behind us.
+            look = anchor - normal * 40.0;
             up = Quat::from_axis_angle(face, -0.5 * x) * up;
         }
         if (32..=34).contains(&i) {
@@ -1230,10 +1242,10 @@ impl World {
             pose = blend(&pose, &chase, smooth5(clamp01((t - 95.5) / 6.5)), false, 0.35, 0.0);
         }
         if i == self.lines.len() - 1 {
-            // After the last word: lift the eyes from the ground and drift on over the horizon,
-            // unhurried, the way we came in.
+            // After the last word: lift the eyes from the ground to the horizon. The glide starts
+            // where the retreat ends and keeps drifting backwards, so the camera never returns.
             let d = (t - 253.5).max(0.0);
-            let gpos = Vec3::new(0.6 * (d * 0.11).sin(), 7.0 + 0.10 * d, -700.0 - 0.9 * d);
+            let gpos = Vec3::new(0.6 * (d * 0.11).sin(), 60.0 + 0.10 * d, -600.0 + 0.9 * d);
             let glide = CamPose { pos: gpos, look: gpos + Vec3::new(0.02, -0.02, -1.0) * 60.0, fov: 42.0, up: Vec3::Y };
             pose = blend(&pose, &glide, smooth5(clamp01((t - 253.5) / 12.0)), false, 0.25, 0.0);
         }
@@ -1864,14 +1876,15 @@ impl World {
             snare: cue_pulse(SNARE, t, 0.14).min(1.2),
             staff: ease_between(t, 253.4, 254.3) * (1.0 - ease_between(t, 268.5, 271.8)),
             picks: {
-                // Each pick lands where its measured note sits on the staff.
+                // Each pick follows its measured note, folded by octaves onto the staff (E4..F5),
+                // so the line keeps the melody's shape and no note falls outside the strings.
                 let n = GUITAR.iter().filter(|g| **g <= t).count();
                 let pick = |back: usize| {
                     if n <= back {
                         return Vec3::ZERO;
                     }
                     let k = n - 1 - back;
-                    Vec3::new(staff_step(GUITAR_NOTES[k]), t - GUITAR[k], (-(t - GUITAR[k]) / 0.9).exp())
+                    Vec3::new((staff_step(GUITAR_NOTES[k]) - 1.0).rem_euclid(7.0) + 1.0, t - GUITAR[k], (-(t - GUITAR[k]) / 0.9).exp())
                 };
                 [pick(0), pick(1)]
             },

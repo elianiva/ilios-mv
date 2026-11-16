@@ -175,7 +175,7 @@ float3 ribbons(float2 vp, float3 ca, float3 cb, float k) {
 // Ending: a staff of five strings of light, a treble staff (E4 G4 B4 D5 F5 from the bottom).
 // Screen y grows downward, so string 0 (E4) is the lowest on screen.
 // Each guitar pick is a note at its real height: the strings nearest it shiver, and a note of
-// light runs out both ways from where it was struck. Notes off the staff get ledger lines.
+// light runs out both ways from where it was struck. Notes arrive folded onto the staff.
 const float STEP = 0.031;  // one diatonic step; the strings are two steps apart
 
 float staffWave(float x, float line) {
@@ -192,15 +192,7 @@ float3 staffNote(float2 vp, float3 k) {
     float3 acc = mix(tint, float3(1.0), 0.5) * k.z * head * (exp(-d * d * 9000.0) * 1.3 + exp(-d * d * 500.0) * 0.3);
     // A faint trace of the note's own height behind the head.
     acc += tint * k.z * 0.25 * exp(-d * d * 40000.0) * step(run, 0.0) * exp(2.0 * max(run, -0.6));
-    float led = 0.0;
-    for (int j = 1; j <= 3; j++) {
-        float lo = -2.0 * float(j);
-        float hi = 8.0 + 2.0 * float(j);
-        float seg = smoothstep(0.07, 0.05, abs(vp.x + 0.25));
-        led += seg * step(k.x, lo + 0.5) * exp(-pow((vp.y - (4.0 - lo) * STEP) * 600.0, 2.0));
-        led += seg * step(hi - 0.5, k.x) * exp(-pow((vp.y - (4.0 - hi) * STEP) * 600.0, 2.0));
-    }
-    return acc + tint * led * k.z * 0.9;
+    return acc;
 }
 
 float3 staff(float2 vp) {
