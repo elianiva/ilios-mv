@@ -1634,6 +1634,7 @@ impl World {
             }
 
             let assemble = g.scatter != Vec3::ZERO;
+            let mut glyph_boost = 1.0_f32;
             let since = t - g.appear;
             if let Kind::Ghost(n) = g.kind {
                 // Breath: each copy lifts off the held letter, drifts up and away, swells and
@@ -1747,22 +1748,33 @@ impl World {
             if last_da {
                 node.scale *= 1.0 + 1.6 * clamp01((t - 87.85) / 2.25).powi(2);
             }
-            // 向こうへと向かうんだ: out of reach. One by one the letters fall in on themselves and
-            // stay where they were as points of light.
+            // 向こうへと向かうんだ: the words do what they say. One by one each letter is drawn out
+            // flat into a dash of light, and the dash leaves for the far side, where the two
+            // lights of the interlude are about to go.
             if g.line == 13 {
                 let death = 96.0 + hash3(g.node.0, 21) * 4.5;
-                let gone = ease_between(t, death, death + 1.3);
+                let squash = ease_between(t, death, death + 0.45);
                 let fade = 1.0 - ease_between(t, 104.0, 110.0);
                 let centre = Vec3::new(g.width * 0.5, g.width * 0.4, 0.0);
-                node.position += centre * 0.92 * gone;
-                node.scale *= 1.0 - 0.92 * gone;
-                opacity *= (1.0 - 0.8 * gone) * fade;
-                if gone > 0.0 {
+                let sc = Vec3::new(1.0 + 0.9 * squash, 1.0 - 0.96 * squash, 1.0);
+                node.position += centre * (Vec3::ONE - sc);
+                node.scale *= sc;
+                glyph_boost = 1.0 + 2.0 * squash;
+                opacity *= (1.0 - ease_between(t, death + 0.35, death + 0.6)) * fade;
+                if t > death + 0.3 {
                     let st = line.spec.station;
-                    let away = clamp01((t - 93.0) / 10.0);
-                    let origin = st.pos - (st.rot * Vec3::Z) * 70.0 * away * away + st.rot * (g.base + centre);
-                    let tw = 0.75 + 0.25 * (t * (1.5 + 3.0 * hash3(g.node.0, 22)) + g.base.x).sin();
-                    debris.push(Particle::new(origin, 0.55, Rgb::hex(TEXT) * (3.0 * gone * fade * tw)).opacity(gone * fade));
+                    let h = |n: u32| hash3(g.node.0, n) - 0.5;
+                    let dir = (st.rot * Vec3::new(0.18 * h(23), 0.2 + 0.12 * h(24), -1.0)).normalize();
+                    let at = |tt: f32| {
+                        let away = clamp01((tt - 93.0) / 10.0);
+                        let fly = (tt - death - 0.4).max(0.0);
+                        st.pos - (st.rot * Vec3::Z) * 70.0 * away * away + st.rot * (g.base + centre) + dir * 26.0 * fly.powf(2.4)
+                    };
+                    let path: Vec<Vec3> = (0..40u32).map(|k| at(t - k as f32 * 0.03)).collect();
+                    let far = (path[0] - cam_now.pos).length();
+                    let born = ease_between(t, death + 0.3, death + 0.6);
+                    let out = 1.0 - ease_between(t, death + 2.2, death + 4.2);
+                    light_trail(&mut debris, &path, 0.006 * (8.0 + far * 0.5), Rgb::hex(0xcfc4ff), born * out * fade);
                 }
             }
             if (26..=31).contains(&g.line) {
@@ -1793,7 +1805,7 @@ impl World {
             };
             if let Some(m) = node.material_mut() {
                 m.opacity = opacity;
-                m.color = glyph_color * lit;
+                m.color = glyph_color * (lit * glyph_boost);
             }
             if let Some(p) = g.plate {
                 pose_echo(&mut ts, p, g, t, opacity);
