@@ -1147,22 +1147,30 @@ impl World {
             let mat = || Material::unlit(Rgb::hex(TEXT)).transparent().opacity(0.0);
             // Everything on the staff rides one wave: (node, x, rest y).
             let mut parts = Vec::new();
+            let heads: Vec<(f32, f32)> = (0..30u32)
+                .map(|n| (-28.0 + n as f32 * 2.1 + hash3(n, 5) * 0.9, ((hash3(n, li as u32) * 9.0).floor() - 4.0) * 0.18 * size))
+                .collect();
             for k in 0..5 {
                 let y = (k as f32 - 2.0) * 0.36 * size;
-                for sgm in 0..150 {
-                    let x = -45.0 + sgm as f32 * 0.6;
-                    parts.push((text_scene.add_to(g, Node::mesh(Geometry::cuboid(0.66, 0.02, 0.01), mat()).at(x, y, 0.0)), x, y));
+                // Pieces butt end to end without overlapping: the staff is see-through, so an
+                // overlap would show as a brighter joint every piece. The line also stops under
+                // each note head, so it does not show through the note.
+                for sgm in 0..300 {
+                    let x = -45.0 + sgm as f32 * 0.3;
+                    if heads.iter().any(|(hx, hy)| (x - hx).abs() < 0.24 * size + 0.15 && (y - hy).abs() < 0.1 * size) {
+                        continue;
+                    }
+                    parts.push((text_scene.add_to(g, Node::mesh(Geometry::cuboid(0.3, 0.02, 0.01), mat()).at(x, y, 0.0)), x, y));
                 }
             }
-            for n in 0..30u32 {
-                let x = -28.0 + n as f32 * 2.1 + hash3(n, 5) * 0.9;
-                let y = ((hash3(n, li as u32) * 9.0).floor() - 4.0) * 0.18 * size;
+            for &(x, y) in &heads {
                 let head = text_scene.add_to(g, Node::mesh(Geometry::circle(0.17 * size, 20), mat()).at(x, y, 0.0).with_rotation(Quat::from_rotation_z(0.4)));
                 text_scene[head].scale = Vec3::new(1.3, 0.85, 1.0);
                 parts.push((head, x, y));
                 let up = if y < 0.0 { 1.0 } else { -1.0 };
-                let stem = text_scene.add_to(g, Node::mesh(Geometry::cuboid(0.03, 1.1 * size, 0.01), mat()).at(x + up * 0.2 * size, y + up * 0.55 * size, 0.0));
-                parts.push((stem, x, y + up * 0.55 * size));
+                // The stem starts at the edge of the head, so the two do not overlap.
+                let stem = text_scene.add_to(g, Node::mesh(Geometry::cuboid(0.03, 1.0 * size, 0.01), mat()).at(x + up * 0.2 * size, y + up * 0.62 * size, 0.0));
+                parts.push((stem, x, y + up * 0.62 * size));
             }
             staffs.push((g, base, t0, t1, size, parts));
         }
