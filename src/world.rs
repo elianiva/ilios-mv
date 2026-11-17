@@ -525,6 +525,8 @@ pub struct World {
     angel_scene: Scene,
     angel_renderer: Renderer,
     angel: (NodeId, Vec<(NodeId, Vec3, f32)>),
+    /// A camera held still for every moment, for the thumbnail (see `hold_camera`).
+    still: Option<CamPose>,
 }
 
 /// The outro's souls appear here, as the guitar solo starts.
@@ -1223,6 +1225,7 @@ impl World {
             angel_scene,
             angel_renderer: Renderer::new(width, height).tone_mapping(ToneMapping::Linear),
             angel: (angel_group, angel),
+            still: None,
         }
     }
 
@@ -1520,7 +1523,16 @@ impl World {
         a.lerp(b, x) + Vec3::Y * 3.0 * (x * PI).sin()
     }
 
+    /// Hold the camera at `pose` from now on, whatever the time: a still frame with no camera
+    /// motion and no motion blur.
+    pub fn hold_camera(&mut self, pose: CamPose) {
+        self.still = Some(pose);
+    }
+
     pub fn camera_at(&self, t: f32) -> CamPose {
+        if let Some(pose) = self.still {
+            return pose;
+        }
         let first_lyric = &self.lines[1];
         let mut pose = if t < first_lyric.start - 0.35 {
             let intro = intro_pose(t);

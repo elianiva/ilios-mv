@@ -47,7 +47,21 @@ pub struct IliosVideo<'a> {
     world: world::World,
     post: Shader,
     sections: [Section; 13],
+    /// The thumbnail: every frame is the title card, settled, under a still camera.
+    thumbnail: bool,
 }
+
+/// The thumbnail's moment: the title, the circle and the credits are all drawn in by now, and
+/// the title has not started to leave.
+const THUMB_T: f32 = 25.5;
+/// The thumbnail's camera: square on to the circle, aimed at the middle of the lettering
+/// (the title and the credits under it).
+const THUMB_CAM: world::CamPose = world::CamPose {
+    pos: fframes::three_d::Vec3::new(0.0, -0.3, 23.0),
+    look: fframes::three_d::Vec3::new(0.0, -0.3, 0.0),
+    fov: 36.0,
+    up: fframes::three_d::Vec3::Y,
+};
 
 impl<'a> IliosVideo<'a> {
     pub fn new(media: &'a IliosMedia) -> Self {
@@ -60,12 +74,13 @@ impl<'a> IliosVideo<'a> {
             "Breakdown", "FinalChorus", "Afterglow", "Outro",
         ];
         let sections = std::array::from_fn(|i| Section { name: names[i], seconds: bounds[i + 1] - bounds[i] });
-        Self {
-            media,
-            world: world::World::new(&lines, WIDTH as u32, HEIGHT as u32),
-            post: Shader::sksl(include_str!("shaders/post.sksl")),
-            sections,
+        // ILIOS_THUMBNAIL=1 turns every frame into the thumbnail: `ILIOS_THUMBNAIL=1 ilios frame 0s`.
+        let thumbnail = std::env::var_os("ILIOS_THUMBNAIL").is_some();
+        let mut world = world::World::new(&lines, WIDTH as u32, HEIGHT as u32);
+        if thumbnail {
+            world.hold_camera(THUMB_CAM);
         }
+        Self { media, world, post: Shader::sksl(include_str!("shaders/post.sksl")), sections, thumbnail }
     }
 }
 
@@ -266,15 +281,14 @@ impl Video for IliosVideo<'_> {
     }
 
     fn render_frame<'b>(&'b self, frame: Frame, ctx: &FFramesContext<'b, '_>) -> Svgr<'b> {
-        let t = frame.seconds();
-        let audio = audio_features(&frame, ctx);
+        let t = if self.thumbnail { THUMB_T } else { frame.seconds() };
+        let audio = if self.thumbnail { graphics::Audio::default() } else { audio_features(&frame, ctx) };
         let f = self.world.render(t, 1.0 / Self::FPS as f32, &audio);
         // Letterbox: the picture is wide in the verses and opens up on every chorus hit.
         let open = (ease_between(t, CHORUS_1 - 0.05, CHORUS_1 + 0.3) * (1.0 - ease_between(t, 91.0, 96.0)))
             .max(ease_between(t, CHORUS_2 - 0.05, CHORUS_2 + 0.3) * (1.0 - ease_between(t, 171.0, 175.0)))
             .max(ease_between(t, FINAL - 0.05, FINAL + 0.3) * (1.0 - ease_between(t, 248.0, 254.0)));
-        // ILIOS_NO_BARS=1 drops the letterbox, for stills such as the thumbnail.
-        let bars = if std::env::var_os("ILIOS_NO_BARS").is_some() { 0.0 } else { 0.085 * (1.0 - open) };
+        let bars = if self.thumbnail { 0.0 } else { 0.085 * (1.0 - open) };
         let b = |k: usize| audio.bins.get(k).copied().unwrap_or(0.0);
         let mut uniforms = ShaderUniforms::new();
         for (g, name) in ["uB0", "uB1", "uB2", "uB3", "uB4", "uB5", "uB6", "uB7"].into_iter().enumerate() {
@@ -362,7 +376,7 @@ impl Video for IliosVideo<'_> {
 
         // The album cover's frame: it draws itself in under the title and leaves before the guitar's
         // strings cross the picture. It steps aside for the wormhole and the white flashes.
-        let frame_op = (1.0 - f.twirl) * (1.0 - clamp01(f.flash)) * (1.0 - clamp01(1.3 * f.reveal.1)) * (1.0 - clamp01(f.dome)) * (1.0 - ease_between(t, 249.5, 252.5));
+        let frame_op = if self.thumbnail { 0.0 } else { 1.0 } * (1.0 - f.twirl) * (1.0 - clamp01(f.flash)) * (1.0 - clamp01(1.3 * f.reveal.1)) * (1.0 - clamp01(f.dome)) * (1.0 - ease_between(t, 249.5, 252.5));
 
         fframes::svgr!(
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width={WIDTH} height={HEIGHT}>
