@@ -1080,9 +1080,22 @@ impl World {
                 }
             }
             // The title: a dark knockout behind each letter so the circle's lines don't run
-            // through it, a spaced Latin subtitle and the cover's red rule.
+            // through it.
             if lrc.is_none() {
                 let title_glyphs: Vec<usize> = (0..glyphs.len()).filter(|&k| glyphs[k].line == li).collect();
+                // イリオス set as one word round the sun, the letters a little off a line: リ sinks,
+                // オ rises and is a touch smaller, ス drops.
+                // Per letter: centre (station space, the sun is behind (0, 0)) and size.
+                let layout = [(-3.25, 0.05, 2.4), (-1.15, -0.2, 2.5), (1.05, 0.4, 2.25), (3.15, -0.3, 2.4)];
+                for (&k, &(x, y, size)) in title_glyphs.iter().zip(layout.iter()) {
+                    let node = glyphs[k].node;
+                    let adv = glyphs[k].width / text_scene[node].scale.x;
+                    let base = Vec3::new(x - adv * size * 0.5, y - 0.36 * size, 0.0);
+                    glyphs[k].base = base;
+                    glyphs[k].width = adv * size;
+                    text_scene[node].position = base;
+                    text_scene[node].scale = Vec3::splat(size);
+                }
                 for k in title_glyphs {
                     let node = glyphs[k].node;
                     let geo = match &text_scene[node].object {
@@ -1098,31 +1111,6 @@ impl World {
                     );
                     glyphs[k].plate = Some(knock);
                 }
-                let sub = "I L I O S";
-                let rs = 0.34;
-                let advs: Vec<f32> = sub.chars().map(|c| glyph_in(true, c).map_or(0.0, |g| g.1) * rs + rs * 0.35).collect();
-                let total: f32 = advs.iter().sum();
-                let mut pen = -total * 0.5;
-                for (k, c) in sub.chars().enumerate() {
-                    if let Some((geo, _)) = glyph_in(true, c) {
-                        let node = text_scene.add_to(group, Node::mesh(geo, Material::unlit(Rgb::hex(0xe4d2d7)).transparent().opacity(0.0))
-                            .with_position(Vec3::new(pen, -size * 0.95, 0.0))
-                            .scaled(rs)
-                            .hidden());
-                        let at = BAND_IN + 4.0 * BEAT + k as f32 * 0.05;
-                        glyphs.push(GlyphInst { kind: Kind::Main, plate: None, tilt: 0.0, scatter: Vec3::ZERO, node, line: li, appear: at,
-                            word_start: at, word_end: at + 0.5, base: Vec3::new(pen, -size * 0.95, 0.0), color: Rgb::hex(0xe4d2d7),
-                            plate_color: Rgb::hex(0xe4d2d7), slam: false, cluster: None, accent: None, width: 0.0, ch: ' ' });
-                    }
-                    pen += advs[k];
-                }
-                let rule = text_scene.add_to(group, Node::mesh(Geometry::cuboid(1.0, 0.035, 0.01), Material::unlit(Rgb::hex(0xff5a6e)).transparent().opacity(0.0))
-                    .with_position(Vec3::new(0.0, -size * 0.66, 0.0))
-                    .hidden());
-                let at = BAND_IN + 4.0 * BEAT + 0.3;
-                glyphs.push(GlyphInst { kind: Kind::Main, plate: None, tilt: 0.0, scatter: Vec3::ZERO, node: rule, line: li, appear: at,
-                    word_start: at, word_end: at + 0.5, base: Vec3::new(0.0, -size * 0.66, 0.0), color: Rgb::hex(0xff5a6e),
-                    plate_color: Rgb::hex(0xff5a6e), slam: false, cluster: None, accent: None, width: 0.0, ch: ' ' });
             }
             let mut words: Vec<(f32, Vec3)> = line
                 .words
