@@ -2047,6 +2047,25 @@ impl World {
                 }
             };
             node.position = g.base + offset + drift;
+            let mut feather = 0.0;
+            if g.line == last {
+                // 僕を置いて, the last time: each letter comes down like a feather, swinging less
+                // and less, and glows while it condenses. Then the letters drift away from each
+                // other while the line fades: nothing holds them together any more.
+                let size = line.spec.size;
+                let h = |n: u32| hash3(g.node.0, n) - 0.5;
+                let f = 1.0 - smooth5(clamp01(since / 1.6));
+                let swing = (since * 3.0 + h(31) * 6.0).sin() * f;
+                let apart = smooth5(clamp01((t - 248.6) / 4.8));
+                node.position = g.base
+                    + drift
+                    + Vec3::new(0.3 * size * swing, 1.2 * size * f * f, -1.4 * f)
+                    + Vec3::new(3.2 * g.base.x + 2.0 * size * h(33), 2.4 * size * h(34), 4.0 * h(35)) * apart;
+                feather = 0.45 * swing + 1.2 * h(36) * apart;
+                let fin = smooth5(clamp01(since / 1.1));
+                opacity = (fin * (1.0 - q)).max(revive * pos);
+                glyph_boost = 1.0 + 1.4 * f * fin;
+            }
             if g.line < 38 {
                 // A held note: the letter-spacing opens for as long as the voice holds.
                 let open = HOLDS.iter().filter(|h| h.0 == g.line).map(|h| ease_between(t, h.3, h.4)).fold(0.0_f32, f32::max);
@@ -2142,13 +2161,13 @@ impl World {
             }
             node.scale *= grow * (1.0 + 0.03 * life);
             let mut glyph_color = g.color;
-            if line.spec.entrance == Entrance::Descend {
+            if line.spec.entrance == Entrance::Descend && g.line != last {
                 let d = expo_out(since / 0.9);
                 node.scale *= Vec3::new(0.7 + 0.3 * d, 1.0 + 2.2 * (1.0 - d), 1.0);
                 glyph_color = Rgb::hex(0xffffff).lerp(g.color, expo_out((since - 0.2) / 1.2));
             }
             let spin = if assemble { (1.0 - rot) * 2.4 * (g.scatter.x.signum()) } else { 0.0 };
-            node.rotation = Quat::from_rotation_x(-flip) * Quat::from_rotation_z(g.tilt * (0.3 + 0.7 * rot) + spin);
+            node.rotation = Quat::from_rotation_x(-flip) * Quat::from_rotation_z(g.tilt * (0.3 + 0.7 * rot) + spin + feather);
             let lit = if t >= g.word_start && t < g.word_end + 0.15 {
                 1.0
             } else if t >= g.word_end {
