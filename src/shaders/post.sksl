@@ -588,12 +588,11 @@ half4 main(float2 p0) {
     col = mix(col, col * float3(1.35, 0.55, 0.6) + float3(0.22, 0.0, 0.03), uRed * 0.55);
     col += uBlue * uRayColor * 0.18 * (1.0 - uv.y) * (1.0 - 0.94 * moonMask);
 
-    // Vignette and grain; the wormhole closes the frame to a bright centre.
+    // Vignette; the wormhole closes the frame to a bright centre.
     float v = length((uv - 0.5) * float2(1.15, 1.0));
     col *= 1.0 - 0.6 * smoothstep(0.35, 0.95, v);
     col *= 1.0 - uTwirl * smoothstep(0.05, 0.6, v);
     col += float3(0.55, 0.5, 0.85) * uTwirl * uTwirl * smoothstep(0.25, 0.0, v) * 0.6;
-    col += (hash(p * 0.71 + fract(iTime) * 113.0) - 0.5) * 0.04;
     col = clamp(col, 0.0, 1.0);
     // Time stop: grey-green, high contrast, the colour drained; the dome inverts inside it.
     if (uStop > 0.001) {
@@ -658,5 +657,9 @@ half4 main(float2 p0) {
         col = mix(col, float3(1.0), clamp(inside * uRevealAmt, 0.0, 1.0));
         col += float3(1.0) * edge * uRevealAmt * 0.35;
     }
+    // Dither against banding in the dark gradients: about one 8-bit level, the same pattern in
+    // every frame, so an encoder sends it once. (Per-frame grain doubled the bits a frame
+    // needed and YouTube smeared it.) Pure black, the bars and the end, stays black.
+    col += (hash(floor(praw) * 0.7313 + 17.0) - 0.5) * (2.0 / 255.0) * smoothstep(0.0, 0.02, max(col.r, max(col.g, col.b)));
     return half4(col, 1.0);
 }
