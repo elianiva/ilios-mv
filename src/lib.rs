@@ -273,7 +273,8 @@ impl Video for IliosVideo<'_> {
         let open = (ease_between(t, CHORUS_1 - 0.05, CHORUS_1 + 0.3) * (1.0 - ease_between(t, 91.0, 96.0)))
             .max(ease_between(t, CHORUS_2 - 0.05, CHORUS_2 + 0.3) * (1.0 - ease_between(t, 171.0, 175.0)))
             .max(ease_between(t, FINAL - 0.05, FINAL + 0.3) * (1.0 - ease_between(t, 248.0, 254.0)));
-        let bars = 0.085 * (1.0 - open);
+        // ILIOS_NO_BARS=1 drops the letterbox, for stills such as the thumbnail.
+        let bars = if std::env::var_os("ILIOS_NO_BARS").is_some() { 0.0 } else { 0.085 * (1.0 - open) };
         let b = |k: usize| audio.bins.get(k).copied().unwrap_or(0.0);
         let mut uniforms = ShaderUniforms::new();
         for (g, name) in ["uB0", "uB1", "uB2", "uB3", "uB4", "uB5", "uB6", "uB7"].into_iter().enumerate() {
