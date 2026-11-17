@@ -6,8 +6,8 @@
 #
 # Writes ilios-master.mp4 (about 1.4 GB, 40 Mbps) and ilios-1080p.mp4 (1080p30 H.264 High,
 # yuv420p, AAC-LC 320 kbps 48 kHz, faststart). The video is encoded on the GPU (VideoToolbox)
-# at an average 7 Mbps, about the 8 Mbps YouTube recommends for 1080p30, so the copy is about
-# 260 MB and well under X's 512 MB limit.
+# at an average 12 Mbps, well within X's
+# 512 MB limit (the copy is about 380 MB).
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -30,7 +30,7 @@ duration=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$MASTER")
 ffmpeg -hide_banner -y \
     -i "$MASTER" -i assets/audio.flac \
     -map 0:v:0 -map 1:a:0 -t "$duration" \
-    -c:v h264_videotoolbox -b:v 7M -maxrate 10M -bufsize 20M -allow_sw 0 \
+    -c:v h264_videotoolbox -b:v 12M -maxrate 16M -bufsize 32M -allow_sw 0 \
     -profile:v high -pix_fmt yuv420p -g 60 \
     -color_primaries bt709 -color_trc bt709 -colorspace bt709 \
     -af "volume=-2dB" -c:a aac_at -b:a 320k -ar 48000 -ac 2 \
