@@ -187,7 +187,7 @@ float2 motion(float2 p, float k) {
     float2 d = p - c;
     float a = uSpin * k;
     float2 r = float2(d.x * cos(a) - d.y * sin(a), d.x * sin(a) + d.y * cos(a));
-    return c + r * (1.0 + (uZoom + 0.16 * uSpeed) * k) + uPan * k;
+    return c + r * (1.0 + (uZoom + 0.16 * uSpeed * uSpeedDir) * k) + uPan * k;
 }
 
 half4 main(float2 p0) {
@@ -241,9 +241,21 @@ half4 main(float2 p0) {
         dd = float2(dd.x * cos(a) - dd.y * sin(a), dd.x * sin(a) + dd.y * cos(a));
         p = cc + dd * (1.0 - 0.35 * uTwirl * (1.0 - rr));
     }
+    // Rewind (the flight backwards out of 君は行ってしまう): not a tunnel but a tape winding
+    // back. Rows of the picture judder sideways, a tracking band rolls up the frame tearing
+    // the rows it crosses, and the bottom of the frame skews like a worn tape head.
+    float rw = uSpeed * step(uSpeedDir, -0.5);
+    if (rw > 0.001) {
+        float rowr = floor(p.y / 4.0);
+        float trk = exp(-pow((fract(p.y / res.y + iTime * 1.6) - 0.5) * 9.0, 2.0));
+        float trk2 = exp(-pow((fract(p.y / res.y * 0.7 + iTime * 1.1 + 0.4) - 0.5) * 16.0, 2.0));
+        p.x += (hash(float2(rowr, floor(iTime * 30.0))) - 0.5) * (5.0 + 70.0 * trk + 30.0 * trk2) * rw;
+        float skew = smoothstep(0.9, 1.0, p.y / res.y);
+        p.x += skew * (40.0 + 30.0 * sin(iTime * 23.0)) * rw;
+    }
     // Flight: space itself is pulled down a tunnel. The edges of the picture stretch away
     // from the vanishing point, the walls twist and ripple, and everything smears outward.
-    if (uSpeed > 0.001) {
+    if (uSpeed > 0.001 && uSpeedDir > 0.0) {
         float2 cc = res * 0.5;
         float2 dd = p - cc;
         float rr = length(dd) / length(cc);
@@ -554,6 +566,23 @@ half4 main(float2 p0) {
         col *= 1.0 - 0.35 * uSpeed * smoothstep(0.5, 1.1, rw2);
     }
 
+    // Rewind: afterimages of the words as they were a moment ago, nearer and bigger, so the
+    // picture runs back through where it has been; the colour drains to an old warm print,
+    // and the tracking band rolls up through it in static.
+    if (rw > 0.001) {
+        float ghost = 0.0;
+        for (int j = 1; j <= 5; j++) {
+            float gs = 1.0 + 0.07 * float(j) * rw;
+            ghost += uText.eval(c + (p - c) / gs + float2(0.0, -6.0 * float(j)) * rw).a * (1.0 - float(j) / 6.0);
+        }
+        col += float3(1.0, 0.86, 0.70) * ghost * 0.14 * rw;
+        float lr = dot(col, float3(0.299, 0.587, 0.114));
+        float3 old = float3(lr) * float3(1.08, 0.93, 0.74) + float3(0.035, 0.022, 0.0);
+        col = mix(col, old, 0.75 * rw);
+        float trk = exp(-pow((fract(uv.y + iTime * 1.6) - 0.5) * 9.0, 2.0));
+        col += (hash(floor(p0 / float2(3.0, 2.0)) + floor(iTime * 30.0)) * 0.6 + 0.2) * trk * 0.22 * rw;
+        col *= 1.0 - 0.08 * rw * (0.5 + 0.5 * sin(p0.y * 0.9 + iTime * 40.0));
+    }
     // Impacts and colour moments.
     col += float3(0.5, 0.46, 0.66) * uHit * 0.06;
     col = mix(col, col * float3(1.35, 0.55, 0.6) + float3(0.22, 0.0, 0.03), uRed * 0.55);
