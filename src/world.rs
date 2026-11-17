@@ -527,6 +527,11 @@ pub struct World {
     angel: (NodeId, Vec<(NodeId, Vec3, f32)>),
 }
 
+/// The outro's souls appear here, as the guitar solo starts.
+const OUTRO_SOULS: f32 = 253.8;
+/// The guitar's last three hits, the ones after the solo: 君's soul climbs to the star on them.
+const LAST_HITS: [f32; 3] = [266.0, 267.8, 268.690];
+
 /// The two souls come out of the dark here, at the start of the interlude.
 const SOULS_BORN: f32 = 96.6;
 
@@ -595,11 +600,6 @@ pub struct Frame3d {
     pub drop: Vec3,
     /// The last two piano keys struck: (screen x, seconds since, amount).
     pub keys: [Vec3; 2],
-    /// Ending: the staff of light, and the last two guitar picks on it: (line, seconds since, amount).
-    pub staff: f32,
-    pub picks: [Vec3; 2],
-    /// Where along the staff each of those two picks was struck (screen x from the centre).
-    pub pick_x: [f32; 2],
     /// Vocal echo: (seconds since, amount).
     pub echo: (f32, f32),
     /// Colour of the air on the planet's limb.
@@ -1470,6 +1470,38 @@ impl World {
         (c + off + leave, c - off + alone + into_warp)
     }
 
+    /// Outro: 君's soul comes back down from the star for the guitar solo and the two souls play
+    /// together. They circle each other, wide at first, and every pick turns them a little
+    /// further; they swoop past the camera; then they dance slowly, almost touching. On the last
+    /// three hits 君's soul climbs back to the star, one step a hit, and 僕's stays. (blue, pink)
+    fn outro_souls(&self, t: f32) -> (Vec3, Vec3) {
+        let c = self.camera_at(t);
+        let fwd = (c.look - c.pos).normalize_or_zero();
+        let right = fwd.cross(c.up.normalize_or_zero()).normalize_or_zero();
+        let up = right.cross(fwd);
+        let at = |x: f32, y: f32, z: f32| c.pos + right * x + up * y + fwd * z;
+        let star = c.pos + KIMI_DIR.normalize() * 600.0;
+        // From p toward q by k, with the distance from the camera eased geometrically, so a
+        // soul crossing from the star to the frame moves evenly on screen.
+        let toward = |p: Vec3, q: Vec3, k: f32| {
+            let (a, b) = (p - c.pos, q - c.pos);
+            let d = a.length().max(0.01) * (b.length().max(0.01) / a.length().max(0.01)).powf(k);
+            c.pos + a.normalize_or_zero().lerp(b.normalize_or_zero(), k).normalize_or_zero() * d
+        };
+        let u = t - OUTRO_SOULS;
+        let kicks: f32 = GUITAR.iter().map(|g| smooth5(clamp01((t - g) / 0.3))).sum();
+        let th = 1.5 * u + 0.5 * kicks;
+        let r = 1.3 - 0.6 * ease_between(t, 259.0, 262.0) - 0.5 * ease_between(t, 263.0, 265.0) + 0.12 * (0.9 * u).sin();
+        let swoop = ease_between(t, 259.5, 261.0) - ease_between(t, 261.3, 263.0);
+        let centre = at(1.2 * (0.45 * u).sin(), 0.15 + 0.4 * (0.6 * u + 1.0).sin(), 6.0 - 3.4 * swoop + 0.6 * (0.33 * u).sin());
+        let off = right * (th.cos() * r) + up * (th.sin() * r * 0.45) + fwd * (th.sin() * r * 0.9);
+        let blue = toward(star, centre + off, smooth5(clamp01((t - OUTRO_SOULS) / 2.6)));
+        let pink = at(-2.5, -3.2, 5.0).lerp(centre - off, smooth5(clamp01((t - OUTRO_SOULS) / 2.2)));
+        let steps = LAST_HITS.iter().map(|h| ease_out(clamp01((t - h) / 0.8))).sum::<f32>() / 3.0;
+        let pink = pink.lerp(at(-0.3, -0.2, 5.5), ease_between(t, LAST_HITS[0], LAST_HITS[2] + 1.0));
+        (toward(blue, star, steps), pink)
+    }
+
     /// Where the two lights of the interlude are heading: from ahead of the camera after
     /// chorus 1 up to the first line of verse 2.
     fn lights_path(&self, t: f32) -> Vec3 {
@@ -1757,6 +1789,7 @@ impl World {
             * (1.0 + 0.07 * (t * 6.3).sin() * window_f(t, 205.5, 212.0, 1.0))
             * (1.0 - ease_between(t, FINAL, FINAL + 0.4));
         let chime = 0.7 * cue_pulse(DROPS, t, 1.3);
+        let chime = chime + 0.6 * cue_swell(&[LAST_HITS[2] + 0.55], t, 0.15, 1.2);
         let chime = if t > 250.0 { chime } else { 0.0 };
         let kimi = (0.75 * ease_between(t, 240.0, 262.0) + chime) * (1.0 - ease_between(t, END - 2.5, END - 0.5));
         // In the run at it, the wish star slides onto the vanishing point: the streaks of the
@@ -2147,6 +2180,52 @@ impl World {
                 debris.push(Particle::new(path[0], width * k, Rgb::hex(0x7fb0ff) * (e * kimi_on)).opacity((e * kimi_on).min(1.0)));
             }
         }
+        // Outro: the two souls' last adventure (see `outro_souls`).
+        let outro_on = ease_between(t, OUTRO_SOULS, OUTRO_SOULS + 0.8) * (1.0 - ease_between(t, 270.5, 273.0));
+        if outro_on > 0.003 {
+            let (mut blue_path, mut pink_path) = (Vec::new(), Vec::new());
+            for k in 0..48u32 {
+                let (b, p) = self.outro_souls((t - k as f32 * 0.024).max(OUTRO_SOULS));
+                blue_path.push(b);
+                pink_path.push(p);
+            }
+            let size_at = |p: Vec3| 0.012 * (6.0 + (p - cam_now.pos).length() * 0.5);
+            // Heartbeat: both souls flare together on every pick.
+            let beat = cue_swell(GUITAR, t, 0.03, 0.2).min(1.2);
+            let breathe = 1.0 + 0.1 * (t * 5.3).sin() + 0.06 * (t * 8.9 + 1.0).sin() + 0.35 * beat;
+            let blue_on = outro_on * (1.0 - ease_between(t, LAST_HITS[2] + 0.5, LAST_HITS[2] + 1.0));
+            for (path, hex, on, br) in [(&blue_path, 0x7fb0ff, blue_on, breathe), (&pink_path, 0xff8f9c, outro_on, 2.0 - breathe + 0.7 * beat)] {
+                if on <= 0.003 {
+                    continue;
+                }
+                let width = size_at(path[0]) * br;
+                light_trail(&mut debris, path, width, Rgb::hex(hex), on);
+                for (k, e) in [(2.4_f32, 0.6_f32), (4.5, 0.22), (8.0, 0.07)] {
+                    let e = e * (1.0 + 0.8 * beat);
+                    debris.push(Particle::new(path[0], width * k, Rgb::hex(hex) * (e * on)).opacity((e * on).min(1.0)));
+                }
+            }
+            // A constellation of the adventure: every pick leaves a small star where a soul is,
+            // the souls in turn, and each soul's stars are joined by a faint line as they go.
+            let mut last: [Option<Vec3>; 2] = [None, None];
+            for (k, g) in GUITAR.iter().enumerate().filter(|(_, g)| **g <= t && **g >= OUTRO_SOULS) {
+                let (b, p) = self.outro_souls(*g);
+                let (at, hex) = if k % 2 == 0 { (p, 0xffb3bf) } else { (b, 0xa8c8ff) };
+                let age = t - g;
+                let twinkle = 0.45 + 0.12 * (t * 2.7 + k as f32 * 1.9).sin();
+                glow(&mut debris, at, size_at(at) * 0.35, Rgb::hex(hex), outro_on * (twinkle + 0.9 * (-age / 0.3).exp()));
+                if let Some(prev) = last[k % 2] {
+                    // The line draws itself from the last star to the new one.
+                    let grow = ease_out(clamp01(age / 0.3));
+                    for j in 0..24 {
+                        let f = (j as f32 + 0.5) / 24.0 * grow;
+                        let q = prev.lerp(at, f);
+                        debris.push(Particle::new(q, size_at(q) * 0.14, Rgb::hex(hex) * (0.22 * outro_on)).opacity((0.45 * outro_on).min(1.0)));
+                    }
+                }
+                last[k % 2] = Some(at);
+            }
+        }
         let mut asc = self.angel_scene.clone();
         let angel_amt = self.pose_angel(&mut asc, &mut debris, t, &cam_now);
         if !debris.is_empty() {
@@ -2253,26 +2332,6 @@ impl World {
             toll: toll(t),
             swell: cue_swell(WHEEZE, t, 0.12, 0.75).min(1.6),
             snare: cue_pulse(SNARE, t, 0.14).min(1.2),
-            staff: ease_between(t, 253.4, 254.3) * (1.0 - ease_between(t, 268.5, 271.8)),
-            picks: {
-                // Each pick lands on one of the five strings. Its measured note is folded onto the
-                // staff (two diatonic steps to a string), so the line keeps the melody's shape and
-                // every note sits exactly on a string.
-                let n = GUITAR.iter().filter(|g| **g <= t).count();
-                let pick = |back: usize| {
-                    if n <= back {
-                        return Vec3::ZERO;
-                    }
-                    let k = n - 1 - back;
-                    Vec3::new((staff_step(GUITAR_NOTES[k]).rem_euclid(10.0) / 2.0).floor(), t - GUITAR[k], (-(t - GUITAR[k]) / 0.9).exp())
-                };
-                [pick(0), pick(1)]
-            },
-            pick_x: {
-                let n = GUITAR.iter().filter(|g| **g <= t).count();
-                let at = |back: usize| if n <= back { 0.0 } else { -0.55 + 1.1 * hash3((n - 1 - back) as u32, 47) };
-                [at(0), at(1)]
-            },
             drop: DROPS.iter().enumerate().rev().find(|(_, d)| **d <= t).map_or(Vec3::ZERO, |(k, d)| Vec3::new(0.3 + 0.4 * hash3(k as u32, 31), t - d, (-(t - d) / 1.5).exp())),
             keys: {
                 // Chords strike wide and bright, single keys softer; each lands on its own key.
