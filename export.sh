@@ -28,14 +28,22 @@ duration=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$MASTER")
 
 # Everything runs on the GPU: VideoToolbox decodes the master and encodes each copy, and
 # -allow_sw 0 fails instead of falling back to the CPU. Only the audio is encoded on the CPU.
+# The master is BT.601 (smpte170m); scale_vt converts it to BT.709 on the GPU. Output tags come
+# from a bitstream filter: -colorspace would make ffmpeg convert on the CPU instead.
+# -reinit_filter 0: the master's colour tags make ffmpeg rebuild the filters on the first frame,
+# and scale_vt can't be rebuilt.
+GPU_IN=(-reinit_filter 0 -hwaccel videotoolbox -hwaccel_output_format videotoolbox_vld)
+TO_709="color_matrix=bt709:color_primaries=bt709:color_transfer=bt709"
+TAG_709="colour_primaries=1:transfer_characteristics=1:matrix_coefficients=1"
+
 # The audio comes from the FLAC, not from the master's AAC, so it is encoded only once. It gets
 # the same -2 dB the render applies.
 ffmpeg -hide_banner -y \
-    -hwaccel videotoolbox -i "$MASTER" -i assets/audio.flac \
+    "${GPU_IN[@]}" -i "$MASTER" -i assets/audio.flac \
     -map 0:v:0 -map 1:a:0 -t "$duration" \
+    -vf "scale_vt=$TO_709" \
     -c:v h264_videotoolbox -b:v 20M -maxrate 28M -bufsize 56M -allow_sw 0 \
-    -profile:v high -pix_fmt yuv420p -g 60 \
-    -color_primaries bt709 -color_trc bt709 -colorspace bt709 \
+    -profile:v high -g 60 -bsf:v "h264_metadata=$TAG_709" \
     -af "volume=-2dB" -c:a aac_at -b:a 320k -ar 48000 -ac 2 \
     -movflags +faststart \
     "$OUT"
@@ -52,11 +60,11 @@ ls -lh "$OUT"
 # scale_vt cannot make the 10-bit frames that Main10 needs without a CPU conversion.
 YT_OUT=ilios-youtube.mp4
 ffmpeg -hide_banner -y \
-    -hwaccel videotoolbox -hwaccel_output_format videotoolbox_vld -i "$MASTER" -i assets/audio.flac \
+    "${GPU_IN[@]}" -i "$MASTER" -i assets/audio.flac \
     -map 0:v:0 -map 1:a:0 -t "$duration" \
-    -vf "scale_vt=w=2560:h=1440" \
+    -vf "scale_vt=w=2560:h=1440:$TO_709" \
     -c:v hevc_videotoolbox -profile:v main -b:v 60M -maxrate 80M -bufsize 160M -allow_sw 0 -tag:v hvc1 -g 15 \
-    -color_primaries bt709 -color_trc bt709 -colorspace bt709 \
+    -bsf:v "hevc_metadata=$TAG_709" \
     -af "volume=-2dB" -c:a aac_at -b:a 384k -ar 48000 -ac 2 \
     -movflags +faststart \
     "$YT_OUT"
@@ -64,7 +72,8 @@ ffmpeg -hide_banner -y \
 ls -lh "$YT_OUT"
 
 # X without Premium takes 2:20 at most: the first 2:20, fading to black and silence over the
-# last 6 s. Once the picture is black, a note says to go watch the full one on YouTube. It is
+# last 6 s. The fade and the note need the frames in memory (hwdownload; setparams keeps their
+# BT.709 tag), and run only for those 6 s. Once the picture is black, a note says to go watch the full one on YouTube. It is
 # encoded at 33 Mbps, about as much as fits in X's 512 MB for 2:20 (about 470 MB).
 X_OUT=ilios-x.mp4
 X_LEN=139.9
@@ -74,14 +83,14 @@ printf '%s' "watch the full one on youtube ;)" > "$notes/a.txt"
 printf '%s' "i don't have x premium so i can't upload the full one here lol" > "$notes/b.txt"
 note="fontcolor=0xe4d2d7:x=(w-text_w)/2:alpha='clip((t-$FADE_AT-3.5)/1.2,0,1)'"
 ffmpeg -hide_banner -y \
-    -hwaccel videotoolbox -i "$MASTER" -i assets/audio.flac \
+    "${GPU_IN[@]}" -i "$MASTER" -i assets/audio.flac \
     -map 0:v:0 -map 1:a:0 -t "$X_LEN" \
-    -vf "fade=t=out:st=$FADE_AT:d=4.0:enable='gte(t,$FADE_AT)',\
+    -vf "scale_vt=$TO_709,hwdownload,format=nv12,setparams=colorspace=bt709:color_primaries=bt709:color_trc=bt709,\
+fade=t=out:st=$FADE_AT:d=4.0:enable='gte(t,$FADE_AT)',\
 drawtext=fontfile=media/ShipporiMincho-ExtraBold.ttf:textfile=$notes/a.txt:fontsize=58:y=h/2-70:$note:enable='gte(t,$FADE_AT)',\
 drawtext=fontfile=media/ShipporiMincho-Medium.ttf:textfile=$notes/b.txt:fontsize=30:y=h/2+20:$note:enable='gte(t,$FADE_AT)'" \
     -c:v h264_videotoolbox -b:v 33M -maxrate 40M -bufsize 80M -allow_sw 0 \
-    -profile:v high -pix_fmt yuv420p -g 60 \
-    -color_primaries bt709 -color_trc bt709 -colorspace bt709 \
+    -profile:v high -g 60 -bsf:v "h264_metadata=$TAG_709" \
     -af "volume=-2dB,afade=t=out:st=$FADE_AT:d=5.6" -c:a aac_at -b:a 320k -ar 48000 -ac 2 \
     -movflags +faststart \
     "$X_OUT"
