@@ -57,8 +57,8 @@ const THUMB_T: f32 = 25.5;
 /// The thumbnail's camera: square on to the circle, aimed at the middle of the lettering
 /// (the title and the credits under it).
 const THUMB_CAM: world::CamPose = world::CamPose {
-    pos: fframes::three_d::Vec3::new(0.0, 0.4, 23.0),
-    look: fframes::three_d::Vec3::new(0.0, 0.4, 0.0),
+    pos: fframes::three_d::Vec3::new(0.0, 1.0, 23.0),
+    look: fframes::three_d::Vec3::new(0.0, 1.0, 0.0),
     fov: 36.0,
     up: fframes::three_d::Vec3::Y,
 };
