@@ -1799,7 +1799,7 @@ impl World {
         let chime = 0.7 * cue_pulse(DROPS, t, 1.3);
         let chime = chime + 0.6 * cue_swell(&[LAST_HITS[2] + 0.55], t, 0.15, 1.2);
         let chime = if t > 250.0 { chime } else { 0.0 };
-        let kimi = (0.75 * ease_between(t, 240.0, 262.0) + chime) * (1.0 - ease_between(t, END - 2.5, END - 0.5));
+        let kimi = 0.75 * ease_between(t, 240.0, 262.0) + chime;
         // In the run at it, the wish star slides onto the vanishing point: the streaks of the
         // flight leave from it, so it is where we are going.
         let (ahead, cam_up) = { let c = self.camera_at(t); ((c.look - c.pos).normalize_or_zero(), c.up.normalize_or_zero()) };

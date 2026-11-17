@@ -349,7 +349,9 @@ impl Video for IliosVideo<'_> {
         // Small cover-style credits, after the title has gone.
         let labels = ease_out((t - 29.0) / 0.9) * (1.0 - ease_between(t, OUTRO - 1.0, OUTRO + 1.0));
         // End card on the first outro chime.
-        let card = ease_out((t - CHIMES[0]) / 1.2) * (1.0 - ease_between(t, END - 3.0, END - 0.8));
+        let card = ease_out((t - CHIMES[0]) / 1.2);
+        // The end: the whole picture, title and all, fades to pitch black and holds there.
+        let to_black = ease_between(t, END - 3.2, END - 0.6);
         let card_rule = ease_out((t - CHIMES[0] - 0.4) / 1.4);
         let rule = ease_out((t - 29.3) / 0.8);
         // The frame steps aside for the big moments (the wormhole, the CRT, the end card).
@@ -379,6 +381,7 @@ impl Video for IliosVideo<'_> {
                         letter-spacing="10" fill={TEXT} fill-opacity="0.8">"Nenne  /  *Luna"</text>
                 </g>
                 {ctx.render_scenes(&frame)}
+                <rect x="0" y="0" width="1920" height="1080" fill="#000" opacity={to_black} />
             </svg>
         )
     }
