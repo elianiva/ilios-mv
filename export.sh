@@ -26,10 +26,12 @@ fi
 [[ -f "$MASTER" ]] || { echo "no $MASTER: run without --encode first" >&2; exit 1; }
 duration=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$MASTER")
 
+# Everything runs on the GPU: VideoToolbox decodes the master and encodes each copy, and
+# -allow_sw 0 fails instead of falling back to the CPU. Only the audio is encoded on the CPU.
 # The audio comes from the FLAC, not from the master's AAC, so it is encoded only once. It gets
 # the same -2 dB the render applies.
 ffmpeg -hide_banner -y \
-    -i "$MASTER" -i assets/audio.flac \
+    -hwaccel videotoolbox -i "$MASTER" -i assets/audio.flac \
     -map 0:v:0 -map 1:a:0 -t "$duration" \
     -c:v h264_videotoolbox -b:v 20M -maxrate 28M -bufsize 56M -allow_sw 0 \
     -profile:v high -pix_fmt yuv420p -g 60 \
@@ -45,13 +47,15 @@ ls -lh "$OUT"
 # bitrate. Testing in 2026 measured about 97.3 VMAF for what YouTube serves from a 1080p upload
 # and 99.95 from a 1440p one; 4K adds nothing over 1440p. The master is upscaled rather than
 # rendered at 1440p because the shader's glow and grain are sized in pixels and would change.
-# HEVC Main10 at 60 Mbps, well above YouTube's 24 Mbps for 1440p30, scored best as an upload.
+# The frames stay on the GPU: decoded, scaled (scale_vt) and encoded by VideoToolbox.
+# HEVC at 60 Mbps, well above YouTube's 16 Mbps for 1440p30. It is 8-bit like the master:
+# scale_vt cannot make the 10-bit frames that Main10 needs without a CPU conversion.
 YT_OUT=ilios-youtube.mp4
 ffmpeg -hide_banner -y \
-    -i "$MASTER" -i assets/audio.flac \
+    -hwaccel videotoolbox -hwaccel_output_format videotoolbox_vld -i "$MASTER" -i assets/audio.flac \
     -map 0:v:0 -map 1:a:0 -t "$duration" \
-    -vf "scale=2560:1440:flags=lanczos,format=p010le" \
-    -c:v hevc_videotoolbox -profile:v main10 -b:v 60M -maxrate 80M -bufsize 160M -allow_sw 0 -tag:v hvc1 -g 15 \
+    -vf "scale_vt=w=2560:h=1440" \
+    -c:v hevc_videotoolbox -profile:v main -b:v 60M -maxrate 80M -bufsize 160M -allow_sw 0 -tag:v hvc1 -g 15 \
     -color_primaries bt709 -color_trc bt709 -colorspace bt709 \
     -af "volume=-2dB" -c:a aac_at -b:a 384k -ar 48000 -ac 2 \
     -movflags +faststart \
@@ -70,11 +74,11 @@ printf '%s' "watch the full one on youtube ;)" > "$notes/a.txt"
 printf '%s' "i don't have x premium so i can't upload the full one here lol" > "$notes/b.txt"
 note="fontcolor=0xe4d2d7:x=(w-text_w)/2:alpha='clip((t-$FADE_AT-3.5)/1.2,0,1)'"
 ffmpeg -hide_banner -y \
-    -i "$MASTER" -i assets/audio.flac \
+    -hwaccel videotoolbox -i "$MASTER" -i assets/audio.flac \
     -map 0:v:0 -map 1:a:0 -t "$X_LEN" \
-    -vf "fade=t=out:st=$FADE_AT:d=4.0,\
-drawtext=fontfile=media/ShipporiMincho-ExtraBold.ttf:textfile=$notes/a.txt:fontsize=58:y=h/2-70:$note,\
-drawtext=fontfile=media/ShipporiMincho-Medium.ttf:textfile=$notes/b.txt:fontsize=30:y=h/2+20:$note" \
+    -vf "fade=t=out:st=$FADE_AT:d=4.0:enable='gte(t,$FADE_AT)',\
+drawtext=fontfile=media/ShipporiMincho-ExtraBold.ttf:textfile=$notes/a.txt:fontsize=58:y=h/2-70:$note:enable='gte(t,$FADE_AT)',\
+drawtext=fontfile=media/ShipporiMincho-Medium.ttf:textfile=$notes/b.txt:fontsize=30:y=h/2+20:$note:enable='gte(t,$FADE_AT)'" \
     -c:v h264_videotoolbox -b:v 33M -maxrate 40M -bufsize 80M -allow_sw 0 \
     -profile:v high -pix_fmt yuv420p -g 60 \
     -color_primaries bt709 -color_trc bt709 -colorspace bt709 \
