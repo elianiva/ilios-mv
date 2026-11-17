@@ -4,7 +4,7 @@
 #   ./export.sh            build, render the master, then encode the upload copy
 #   ./export.sh --encode   only encode the upload copy from an existing master
 #
-# Also writes ilios-youtube.mp4 (1440p, for YouTube) and ilios-x.mp4 (the first 2:20, for X).
+# Also writes ilios-youtube.mp4 (4K, for YouTube) and ilios-x.mp4 (the first 2:20, for X).
 # Writes ilios-master.mp4 (about 1.4 GB, 40 Mbps) and ilios-1080p.mp4 (1080p30 H.264 High,
 # yuv420p, AAC-LC 320 kbps 48 kHz, faststart). The video is encoded on the GPU (VideoToolbox)
 # at an average 20 Mbps (about 720 MB): the film grain and scanlines blocked up at 12 Mbps.
@@ -50,20 +50,21 @@ ffmpeg -hide_banner -y \
 
 ls -lh "$OUT"
 
-# YouTube: 1440p, upscaled from the master. YouTube encodes 1440p uploads with VP9/AV1 at every
-# size and plays them in HD by default, where a 1080p upload often gets only H.264 at a low
-# bitrate. Testing in 2026 measured about 97.3 VMAF for what YouTube serves from a 1080p upload
-# and 99.95 from a 1440p one; 4K adds nothing over 1440p. The master is upscaled rather than
-# rendered at 1440p because the shader's glow and grain are sized in pixels and would change.
+# YouTube: 4K, upscaled from the master. YouTube encodes uploads above 1080p with VP9/AV1 at
+# every size and plays them in HD by default; a 1080p upload often gets only H.264 at a low
+# bitrate. Tests with easy footage found 1440p as good as 4K, but with hard footage (dark, fine
+# texture, like this film) a 4K upload gave clearly better 1080p streams (2020: 83.7 -> 88.9
+# VMAF), and the 2160p stream gets about twice the bits of the 1440p one. The master is upscaled
+# rather than rendered at 4K because the shader's glow and scanlines are sized in pixels.
 # The frames stay on the GPU: decoded, scaled (scale_vt) and encoded by VideoToolbox.
-# HEVC at 60 Mbps, well above YouTube's 16 Mbps for 1440p30. It is 8-bit like the master:
+# HEVC at 80 Mbps, well above YouTube's 35-45 Mbps for 2160p30. It is 8-bit like the master:
 # scale_vt cannot make the 10-bit frames that Main10 needs without a CPU conversion.
 YT_OUT=ilios-youtube.mp4
 ffmpeg -hide_banner -y \
     "${GPU_IN[@]}" -i "$MASTER" -i assets/audio.flac \
     -map 0:v:0 -map 1:a:0 -t "$duration" \
-    -vf "scale_vt=w=2560:h=1440:$TO_709" \
-    -c:v hevc_videotoolbox -profile:v main -b:v 60M -maxrate 80M -bufsize 160M -allow_sw 0 -tag:v hvc1 -g 15 \
+    -vf "scale_vt=w=3840:h=2160:$TO_709" \
+    -c:v hevc_videotoolbox -profile:v main -b:v 80M -maxrate 110M -bufsize 220M -allow_sw 0 -tag:v hvc1 -g 15 \
     -bsf:v "hevc_metadata=$TAG_709" \
     -af "volume=-2dB" -c:a aac_at -b:a 384k -ar 48000 -ac 2 \
     -movflags +faststart \
