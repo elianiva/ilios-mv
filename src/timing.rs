@@ -170,33 +170,15 @@ pub fn world_clock(t: f32) -> f32 {
 }
 
 // Cues labeled by ear against the audio (tools/cues), in seconds.
-/// The picked guitar notes of the ending.
+/// The picked guitar notes of the ending: labelled by ear, then checked against the onsets of
+/// the spectrum (spectral flux at 250 Hz-12 kHz). Ten picks the ear missed are added where the
+/// 1.5-12 kHz bands show a pick as clear as the labelled ones round it.
 pub const GUITAR: &[f32] = &[
-    254.295, 254.465, 254.595, 254.754, 254.863, 254.992, 255.193, 255.662, 255.979, 256.101, 256.401, 256.700, 256.989, 257.308, 257.448, 257.757,
-    257.897, 258.091, 258.506, 258.795, 258.965, 259.114, 259.295, 259.437, 259.573, 259.693, 260.002, 260.265, 260.601, 261.479, 261.788, 262.078,
-    262.397, 263.515, 263.903, 264.183, 265.332, 265.689,
-    // The three hits after the last labelled pick, one beat apart or two, from the onsets of
-    // the 2-8 kHz band (each as strong as the labelled picks round it).
-    266.000, 267.800, 268.690,
+    254.295, 254.465, 254.595, 254.754, 254.863, 254.992, 255.193, 255.662, 255.979, 256.101, 256.401, 256.563, 256.700, 256.865, 256.989, 257.308,
+    257.448, 257.757, 257.897, 258.091, 258.206, 258.345, 258.506, 258.795, 258.965, 259.114, 259.295, 259.437, 259.573, 259.693, 260.002, 260.265,
+    260.601, 261.479, 261.788, 262.078, 262.397, 263.297, 263.515, 263.610, 263.903, 264.183, 264.812, 265.084, 265.332, 265.427, 265.689, 266.000,
+    266.896, 267.800, 268.690,
 ];
-/// The pitch of each guitar pick (MIDI), estimated from the spectrum that appears after each
-/// onset. Three estimators (free-pitch harmonic sum, a vote over window sizes, a semitone
-/// template limited to the gap before the next pick) agree on 24 picks; the other 14 take the
-/// majority and are a best guess: picks 2, 4–8, 17, 18, 21, 27, 29, 30, 33, 36. The mix is
-/// about 7 cents sharp, and the line fits B♭ major / G minor. The last three are a rough guess.
-pub const GUITAR_NOTES: &[u8] = &[
-    54, 82, 60, 82, 82, 66, 58, 81, 58, 70, 72, 77, 70, 79, 79, 81, 77, 77, 69, 69, 69, 67, 65, 74, 60, 75, 60, 75, 58, 60,
-    74, 65, 74, 70, 67, 72, 67, 81, 43, 50, 65,
-];
-const _: () = assert!(GUITAR_NOTES.len() == GUITAR.len());
-
-/// Where a note sits on a treble staff: diatonic steps above E4, the bottom line. Black
-/// keys are spelled as flats (the key is B♭ major).
-pub fn staff_step(midi: u8) -> f32 {
-    const LETTER: [i32; 12] = [0, 1, 1, 2, 2, 3, 4, 4, 5, 5, 6, 6];
-    let m = midi as i32;
-    ((m / 12 - 1) * 7 + LETTER[(m % 12) as usize] - 30) as f32
-}
 /// A single low note that lands like something dropped into water.
 pub const DROPS: &[f32] = &[2.298, 6.788, 9.502, 98.599, 102.191, 105.793, 109.395, 111.201, 114.782, 118.404, 272.464, 275.996, 279.209, 282.501];
 pub const KEYS: &[f32] = &[
