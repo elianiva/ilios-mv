@@ -359,7 +359,7 @@ impl Video for IliosVideo<'_> {
 
         // The album cover's frame: it draws itself in under the title and leaves before the guitar's
         // strings cross the picture. It steps aside for the wormhole and the white flashes.
-        let frame_op = (1.0 - f.twirl) * (1.0 - clamp01(f.flash)) * (1.0 - clamp01(f.dome)) * (1.0 - ease_between(t, 249.5, 252.5));
+        let frame_op = (1.0 - f.twirl) * (1.0 - clamp01(f.flash)) * (1.0 - clamp01(1.3 * f.reveal.1)) * (1.0 - clamp01(f.dome)) * (1.0 - ease_between(t, 249.5, 252.5));
 
         fframes::svgr!(
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width={WIDTH} height={HEIGHT}>

@@ -624,8 +624,8 @@ fn reveal(t: f32) -> (f32, f32) {
     if s > 2.2 {
         return (0.0, 0.0);
     }
-    let radius = 0.1 + 2.6 * expo_out((s + 0.15) / 1.7);
-    let amt = 0.85 * ease_between(s, -0.15, 0.08) * (1.0 - ease_between(s, 0.0, 1.8)).powi(2);
+    let radius = 0.6 + 2.8 * expo_out((s + 0.15) / 1.4);
+    let amt = ease_between(s, -0.15, 0.02) * (1.0 - ease_between(s, 0.12, 1.8)).powi(2);
     (radius, amt)
 }
 const GLITCHES: &[(f32, f32)] = &[(49.09, 0.2), (49.98, 0.25), (CHORUS_1, 0.2), (BAND_BACK, 0.3), (130.69, 0.4), (FINAL, 0.35)];
