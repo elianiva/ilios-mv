@@ -6,13 +6,13 @@
 #
 # The circle is softened and faded into the dark; the title and the names stay crisp and
 # bright on a pool of shade, so they read at the small size YouTube shows thumbnails at. The
-# lettering (title, ILIOS and the names) is placed at the optical centre, a little above the
-# middle: centred by the numbers, the block looks like it sags.
+# block of lettering (title, ILIOS and the names) is centred as a whole, not by the title alone,
+# which left the names hanging low.
 
 import sys, numpy as np
 from PIL import Image, ImageFilter
 
-OPTICAL_Y = 0.46  # where the middle of the lettering's block goes, as a fraction of the height
+OPTICAL_Y = 0.50  # where the middle of the lettering's block goes, as a fraction of the height
 
 src, out = sys.argv[1], sys.argv[2]
 full = Image.open(src).convert('RGB')
