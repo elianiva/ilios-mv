@@ -2108,9 +2108,6 @@ impl World {
             if g.line == 0 && t > BAND_IN {
                 node.scale *= 1.0 + 0.05 * audio.low;
             }
-            if g.line == 16 {
-                node.position.x += g.base.x.signum() * 0.9 * ease_between(t, 120.6, 123.8);
-            }
             node.scale *= grow * (1.0 + 0.03 * life);
             let mut glyph_color = g.color;
             if line.spec.entrance == Entrance::Descend {
