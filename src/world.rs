@@ -1500,14 +1500,23 @@ impl World {
             c.pos + a.normalize_or_zero().lerp(b.normalize_or_zero(), k).normalize_or_zero() * d
         };
         let u = t - OUTRO_SOULS;
-        let kicks: f32 = GUITAR.iter().map(|g| smooth5(clamp01((t - g) / 0.3))).sum();
-        let th = 1.5 * u + 0.5 * kicks;
-        let r = 1.3 - 0.6 * ease_between(t, 259.0, 262.0) - 0.5 * ease_between(t, 263.0, 265.0) + 0.12 * (0.9 * u).sin();
+        // They play: circling each other at an uneven pace, one running ahead and the other
+        // catching up, the loop tipping and widening, the pair wandering about the frame.
+        let th = 1.5 * u + 0.9 * (0.7 * u).sin() + 0.5 * (1.9 * u + 1.0).sin();
+        let r = 1.3 - 0.6 * ease_between(t, 259.0, 262.0) - 0.5 * ease_between(t, 263.0, 265.0) + 0.3 * (1.1 * u).sin();
         let swoop = ease_between(t, 259.5, 261.0) - ease_between(t, 261.3, 263.0);
-        let centre = at(1.2 * (0.45 * u).sin(), 0.15 + 0.4 * (0.6 * u + 1.0).sin(), 6.0 - 3.4 * swoop + 0.6 * (0.33 * u).sin());
-        let off = right * (th.cos() * r) + up * (th.sin() * r * 0.45) + fwd * (th.sin() * r * 0.9);
+        let centre = at(
+            1.4 * (0.45 * u).sin() + 0.4 * (1.3 * u + 2.0).sin(),
+            0.15 + 0.5 * (0.6 * u + 1.0).sin() + 0.2 * (1.7 * u).sin(),
+            6.0 - 3.4 * swoop + 0.8 * (0.33 * u).sin(),
+        );
+        let tip = 0.45 + 0.35 * (0.5 * u).sin();
+        let orbit = |a: f32, r: f32| right * (a.cos() * r) + up * (a.sin() * r * tip) + fwd * (a.sin() * r * 0.9);
+        let off = orbit(th, r);
+        let lag = PI + 0.7 * (1.3 * u).sin();
+        let pink_off = orbit(th + lag, r * (1.0 + 0.3 * (0.8 * u + 2.0).sin()));
         let blue = toward(star, centre + off, smooth5(clamp01((t - OUTRO_SOULS) / 2.6)));
-        let pink = at(-2.5, -3.2, 5.0).lerp(centre - off, smooth5(clamp01((t - OUTRO_SOULS) / 2.2)));
+        let pink = at(-2.5, -3.2, 5.0).lerp(centre + pink_off, smooth5(clamp01((t - OUTRO_SOULS) / 2.2)));
         let steps = LAST_HITS.iter().map(|h| ease_out(clamp01((t - h) / 0.8))).sum::<f32>() / 3.0;
         let pink = pink.lerp(at(-0.3, -0.2, 5.5), ease_between(t, LAST_HITS[0], LAST_HITS[2] + 1.0));
         (toward(blue, star, steps), pink)
@@ -2243,40 +2252,17 @@ impl World {
                 pink_path.push(p);
             }
             let size_at = |p: Vec3| 0.012 * (6.0 + (p - cam_now.pos).length() * 0.5);
-            // Heartbeat: both souls flare together on every pick.
-            let beat = cue_swell(GUITAR, t, 0.03, 0.2).min(1.2);
-            let breathe = 1.0 + 0.1 * (t * 5.3).sin() + 0.06 * (t * 8.9 + 1.0).sin() + 0.35 * beat;
+            let breathe = 1.0 + 0.1 * (t * 5.3).sin() + 0.06 * (t * 8.9 + 1.0).sin();
             let blue_on = outro_on * (1.0 - ease_between(t, LAST_HITS[2] + 0.5, LAST_HITS[2] + 1.0));
-            for (path, hex, on, br) in [(&blue_path, 0x7fb0ff, blue_on, breathe), (&pink_path, 0xff8f9c, outro_on, 2.0 - breathe + 0.7 * beat)] {
+            for (path, hex, on, br) in [(&blue_path, 0x7fb0ff, blue_on, breathe), (&pink_path, 0xff8f9c, outro_on, 2.0 - breathe)] {
                 if on <= 0.003 {
                     continue;
                 }
                 let width = size_at(path[0]) * br;
                 light_trail(&mut debris, path, width, Rgb::hex(hex), on);
                 for (k, e) in [(2.4_f32, 0.6_f32), (4.5, 0.22), (8.0, 0.07)] {
-                    let e = e * (1.0 + 0.8 * beat);
                     debris.push(Particle::new(path[0], width * k, Rgb::hex(hex) * (e * on)).opacity((e * on).min(1.0)));
                 }
-            }
-            // A constellation of the adventure: every pick leaves a small star where a soul is,
-            // the souls in turn, and each soul's stars are joined by a faint line as they go.
-            let mut last: [Option<Vec3>; 2] = [None, None];
-            for (k, g) in GUITAR.iter().enumerate().filter(|(_, g)| **g <= t && **g >= OUTRO_SOULS) {
-                let (b, p) = self.outro_souls(*g);
-                let (at, hex) = if k % 2 == 0 { (p, 0xffb3bf) } else { (b, 0xa8c8ff) };
-                let age = t - g;
-                let twinkle = 0.45 + 0.12 * (t * 2.7 + k as f32 * 1.9).sin();
-                glow(&mut debris, at, size_at(at) * 0.35, Rgb::hex(hex), outro_on * (twinkle + 0.9 * (-age / 0.3).exp()));
-                if let Some(prev) = last[k % 2] {
-                    // The line draws itself from the last star to the new one.
-                    let grow = ease_out(clamp01(age / 0.3));
-                    for j in 0..24 {
-                        let f = (j as f32 + 0.5) / 24.0 * grow;
-                        let q = prev.lerp(at, f);
-                        debris.push(Particle::new(q, size_at(q) * 0.14, Rgb::hex(hex) * (0.22 * outro_on)).opacity((0.45 * outro_on).min(1.0)));
-                    }
-                }
-                last[k % 2] = Some(at);
             }
         }
         let mut asc = self.angel_scene.clone();
