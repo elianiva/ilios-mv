@@ -876,7 +876,7 @@ impl World {
                 (Some(11), _) => (first - 0.4, 90.1),
                 (Some(21), _) => (first - 0.4, 158.25),
                 // その目が僕は好きだった is gone before the second voice comes in at 185.57.
-                (Some(27), _) => (first - 0.4, 184.8),
+                (Some(27), _) => (first - 0.4, 185.5),
                 // The first 僕を置いて is gone before the second appears in front of it.
                 (Some(37), _) => (first - 0.4, 245.7),
                 (_, Some(n)) => (first - 0.4, n + 2.0),
@@ -2010,7 +2010,16 @@ impl World {
             let scl = expo_out((since - 0.04) / 0.75);
             let fade_in = expo_out(since / 0.22);
             // Exit: accelerate away (expo-in) instead of a plain fade.
-            let q = if g.line == last { ease_between(t, 250.5, 253.4) } else { expo_in((t - line.out_t) / 0.5) };
+            let q = if g.line == last {
+                ease_between(t, 250.5, 253.4)
+            } else if g.line == 28 {
+                // その目が僕は好きだった: the letters dim in the order they were sung; the last
+                // is gone before the second voice comes in at 185.57.
+                let a = 183.5 + 1.45 * clamp01((g.word_start - 180.5) / 4.5);
+                smooth5(clamp01((t - a) / (185.5 - a)))
+            } else {
+                expo_in((t - line.out_t) / 0.5)
+            };
             let mut opacity = (fade_in * (1.0 - q)).max(revive * pos);
             if let Kind::Echo(n) = g.kind {
                 opacity *= 0.5_f32.powi(n as i32) * 0.55;
