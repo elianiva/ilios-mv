@@ -125,6 +125,8 @@ pub struct Graphics {
     gem: NodeId,
     /// Magic circle round the title (0:15.8) and the big one the choruses happen on.
     title_circle: MagicCircle,
+    /// How bright the title's circle is against the video's own mix (1); the thumbnail lifts it.
+    pub title_circle_gain: f32,
     chorus_circle: MagicCircle,
     /// 高く高く: altitude ticks streaming past as the camera climbs.
     ruler: Vec<(NodeId, f32)>,
@@ -665,11 +667,12 @@ impl Graphics {
         // Sound rings only for the iron (鉄) and the last chorus's hit.
         let ring_events: Vec<(f32, f32)> = vec![];
 
-        Self { stars, links, gem, title_circle, chorus_circle, ruler, rings, ring_events }
+        Self { stars, links, gem, title_circle, title_circle_gain: 1.0, chorus_circle, ruler, rings, ring_events }
     }
 
     pub fn pose(&self, s: &mut Scene, t: f32, clock: f32, spell_since: f32, audio: &Audio) {
-        let m = mix(t);
+        let mut m = mix(t);
+        m.title_circle *= self.title_circle_gain;
         let set = |s: &mut Scene, id: NodeId, op: f32| {
             s[id].visible = op > 0.003;
             for d in std::iter::once(id).chain(s.descendants(id)) {

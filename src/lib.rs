@@ -57,8 +57,8 @@ const THUMB_T: f32 = 25.5;
 /// The thumbnail's camera: square on to the circle, aimed at the middle of the lettering
 /// (the title and the credits under it).
 const THUMB_CAM: world::CamPose = world::CamPose {
-    pos: fframes::three_d::Vec3::new(0.0, -0.3, 23.0),
-    look: fframes::three_d::Vec3::new(0.0, -0.3, 0.0),
+    pos: fframes::three_d::Vec3::new(0.0, 0.4, 23.0),
+    look: fframes::three_d::Vec3::new(0.0, 0.4, 0.0),
     fov: 36.0,
     up: fframes::three_d::Vec3::Y,
 };
@@ -78,7 +78,7 @@ impl<'a> IliosVideo<'a> {
         let thumbnail = std::env::var_os("ILIOS_THUMBNAIL").is_some();
         let mut world = world::World::new(&lines, WIDTH as u32, HEIGHT as u32);
         if thumbnail {
-            world.hold_camera(THUMB_CAM);
+            world.make_thumbnail(THUMB_CAM, 1.8);
         }
         Self { media, world, post: Shader::sksl(include_str!("shaders/post.sksl")), sections, thumbnail }
     }

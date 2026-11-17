@@ -525,7 +525,7 @@ pub struct World {
     angel_scene: Scene,
     angel_renderer: Renderer,
     angel: (NodeId, Vec<(NodeId, Vec3, f32)>),
-    /// A camera held still for every moment, for the thumbnail (see `hold_camera`).
+    /// A camera held still for every moment, for the thumbnail (see `make_thumbnail`).
     still: Option<CamPose>,
 }
 
@@ -1523,10 +1523,11 @@ impl World {
         a.lerp(b, x) + Vec3::Y * 3.0 * (x * PI).sin()
     }
 
-    /// Hold the camera at `pose` from now on, whatever the time: a still frame with no camera
-    /// motion and no motion blur.
-    pub fn hold_camera(&mut self, pose: CamPose) {
+    /// Make every frame the thumbnail: the camera held at `pose` whatever the time (no camera
+    /// motion, no motion blur) and the title's circle `ring` times as bright as in the video.
+    pub fn make_thumbnail(&mut self, pose: CamPose, ring: f32) {
         self.still = Some(pose);
+        self.graphics.title_circle_gain = ring;
     }
 
     pub fn camera_at(&self, t: f32) -> CamPose {
