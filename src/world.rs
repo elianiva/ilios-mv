@@ -2006,6 +2006,12 @@ impl World {
             let rot = expo_out((since - 0.09) / 0.7);
             let scl = expo_out((since - 0.04) / 0.75);
             let fade_in = expo_out(since / 0.22);
+            // Lines with their own motion (the title, 笑顔で言う, 向こうへ, 鉛のような, the last
+            // 僕を置いて) keep it; every other line floats, takes the beat and leaves letter by
+            // letter (see below).
+            let alive = g.kind == Kind::Main && g.line != 0 && g.line != last && ![6, 13, 17].contains(&g.line);
+            // Where the letter's word falls in the line, 0 to 1.
+            let order = clamp01((g.word_start - line.start) / (line.end - line.start).max(0.1));
             // Exit: accelerate away (expo-in) instead of a plain fade.
             let q = if g.line == last {
                 ease_between(t, 250.5, 253.4)
@@ -2014,6 +2020,10 @@ impl World {
                 // is gone before the second voice comes in at 185.57.
                 let a = 183.5 + 1.45 * clamp01((g.word_start - 180.5) / 4.5);
                 smooth5(clamp01((t - a) / (185.5 - a)))
+            } else if alive {
+                // Letter by letter, in the order they were sung; the last leaves when the whole
+                // line used to, so no exit comes any closer to the next line.
+                expo_in((t - line.out_t + 0.3 * (1.0 - order)) / 0.5)
             } else {
                 expo_in((t - line.out_t) / 0.5)
             };
@@ -2045,6 +2055,24 @@ impl World {
             };
             node.position = g.base + offset + drift;
             let mut feather = 0.0;
+            if alive {
+                let size = line.spec.size;
+                let h = |n: u32| hash3(g.node.0, n) - 0.5;
+                // Afloat: once landed, each letter bobs and sways a little, the phase running
+                // along the line so a slow wave passes through it. On the world clock, so it
+                // freezes when time stops.
+                let c = world_clock(t);
+                let settle = smooth5(clamp01((since - 0.3) / 1.2));
+                let ph = (g.base.x - g.base.y) / size * 0.8;
+                node.position.y += 0.05 * size * settle * (1.3 * c - ph).sin();
+                node.position.x += 0.02 * size * settle * (0.8 * c - 1.3 * ph + 1.0).sin();
+                feather = 0.04 * settle * (1.1 * c - ph + 2.0).sin();
+                // Leaving: each letter drifts back, away from the others, turning as it goes.
+                node.position += Vec3::new(0.3 * g.base.x + 0.5 * size * h(41), 0.6 * size * (h(42) + 0.25), 0.0) * q;
+                feather += 0.5 * h(43) * q;
+                // The band's beat swells the letters a little.
+                node.scale *= 1.0 + 0.03 * beat_pulse(t) * settle;
+            }
             if g.line == last {
                 // 僕を置いて, the last time: each letter comes down like a feather, swinging less
                 // and less, and glows while it condenses. Then the letters drift away from each
