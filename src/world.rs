@@ -1563,8 +1563,15 @@ impl World {
                 let w = if matches!(self.lines[j].spec.flow, Flow::Punch | Flow::PunchBack) { 0.8 } else { w };
                 let hold_end = HOLDS.iter().filter(|h| h.0 == j - 1).map(|h| h.4).fold(0.0_f32, f32::max);
                 let earliest = prev.words.last().map_or(0.0, |w| w.0).max(hold_end - 0.3);
-                let start = (land - w).max(earliest).min(land - 0.3);
-                (w, start, ((land - start) / 0.5).clamp(2.0, 5.0))
+                // Long trips take longer: every move keeps about the pace of the first verse
+                // (14 m and 33 degrees in 2 s). They leave earlier to still land on the line,
+                // and must end before the next line starts.
+                let (a, b) = (self.line_pose(j - 1, land), self.line_pose(j, land));
+                let turn = (a.look - a.pos).normalize().angle_between((b.look - b.pos).normalize()).to_degrees();
+                let need = (a.pos.distance(b.pos) / 7.0).max(turn / 17.0).min(4.5);
+                let start = (land - w.max(0.55 * need)).max(earliest).min(land - 0.3);
+                let room = self.lines.get(j + 1).map_or(f32::MAX, |nx| nx.start - 0.2 - start);
+                (w, start, ((land - start) / 0.5).clamp(2.0, 5.0).max(need.min(room)))
             };
             let mut pose = self.held_pose(i, t);
             if i > 1 {
