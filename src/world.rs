@@ -1446,9 +1446,14 @@ impl World {
                 u += p.up;
             }
             let (pos, look) = (pos / 5.0, look / 5.0);
-            fwd = (look - pos).normalize_or_zero();
-            right = fwd.cross(u.normalize_or_zero()).normalize_or_zero();
-            up = right.cross(fwd);
+            // Turn the dance from the world's axes to the camera's as the follow comes in; taking
+            // the camera's at once snapped both souls in one frame.
+            let cf = (look - pos).normalize_or_zero();
+            let cr = cf.cross(u.normalize_or_zero()).normalize_or_zero();
+            let k = smooth5(clamp01((t - 110.5) / 1.5));
+            fwd = fwd.lerp(cf, k).normalize_or_zero();
+            right = right.lerp(cr, k).normalize_or_zero();
+            up = right.cross(fwd).normalize_or_zero();
             // Nearer than the words and roaming round them: they pass in front of the lyric,
             // drift to the edges and come back.
             let near = (look - pos).length().min(8.0) * 0.4;
